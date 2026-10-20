@@ -1,0 +1,20 @@
+{
+  "summary": "Smoke test of the re-imported GiftsDates app with Stripe. Backend: 31/31 pytest passed across test_reimport_smoke_stripe.py, test_stripe_checkout.py and test_smoke_auth.py. These cover health, register/login/me, duplicate and wrong-password handling, admin login, the main page endpoints, checkout for every package type (coins, custom, premium, premium_lite, VIP subscription, unknown package rejected with 400, custom amount below the minimum rejected), payment status, and the webhook rejecting a bad signature. Frontend: the landing page loads with the original logo and dark luxury styling. Admin login goes to /browse, and /admin opens with all its tabs. The test user's /browse, /profile, /dates and /wallet pages load with no page errors. Wallet > Top up shows 5 coin packages plus a custom amount. Clicking Small Talk ($9.99) redirected to checkout.stripe.com (sandbox, managed payments/Link). I paid with 4242 4242 4242 4242 and a US billing address. Stripe returned to /payment/success?session_id=..., which showed 'Payment successful', and the header coin count went from 0 to 100. GET /api/payments/status/{sid} returns completed/paid. Calling it again does not credit coins twice (stays at 100).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_reimport_smoke_stripe.py", "/app/backend/tests/test_stripe_checkout.py", "/app/backend/tests/test_smoke_auth.py", "/app/test_reports/pytest/pytest_iter34.xml"],
+  "action_items": [
+    "/app/memory/test_credentials.md has only the header comments and no credentials. Add admin giftsdates@gmail.com / Admin@12345 and testuser@giftsdates.com / Test@12345."
+  ],
+  "critical_code_review_comments": [
+    "GET /api/payments/status/{session_id} needs no auth. Anyone with a session id can trigger fulfillment. It credits the right user and is idempotent, so the risk is low, but consider requiring auth or checking the owner.",
+    "server.py is more than 5000 lines. Consider splitting payments, auth and admin into routers (not urgent).",
+    "Coins are only credited when the user returns to /payment/success or when the Stripe webhook arrives. Check that STRIPE_WEBHOOK_SECRET is set for production; otherwise a user who closes the tab before the redirect only gets coins via the webhook."
+  ],
+  "updated_files": ["/app/backend/tests/test_stripe_checkout.py (stale admin password Admin@GD24! -> Admin@12345, removed hardcoded default URL)"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "One real sandbox payment for testuser@giftsdates.com (Small Talk, now 100 coins). Several initiated-but-unpaid checkout sessions. test_*@example.com users created by the register test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "To fill Stripe Checkout in Playwright: the Card option's accordion button is not visible, so mouse-click the bounding box of #payment-method-label-card. Then fill #cardNumber/#cardExpiry/#cardCvc/#billingName, select #billingCountry US, fill #billingAddressLine1 and press Escape to close the Google autocomplete, fill #billingLocality/#billingPostalCode, select #billingAdministrativeArea, fill #phoneNumber (Link requires it), and click [data-testid=hosted-payment-submit-button]. Many old test files in /app/backend/tests use old seeds and passwords."
+}

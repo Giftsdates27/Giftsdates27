@@ -80,3 +80,8 @@ React (CRA/craco) + FastAPI (server.py, ~4.9k lines) + MongoDB. JWT email/passwo
 - VIP taxi at VIP's place (2026-06): when place=own the inviter (client) requests taxi coins (taxi.by=client) and the VIP sends/declines; VIP pays from coins→client withdrawable (txn vip_taxi_to_client), no auto-confirm. Other places unchanged (VIP asks, client pays). Empty taxi box hidden.
 - VIP reschedule by VIP (2026-06): VIP can propose a new time on pending/confirmed vip_sched bookings (reschedule_proposal); inviter accepts (/reschedule/accept re-validates slot) or keeps original (/reschedule/decline). Shared helpers _vs_check_new_time/_vs_apply_time.
 - Chat date cards (2026-06): type=date_card messages (kind invite/booking/vip, event invite/accepted/location/confirmed/declined, action_for) via _date_chat_card; _close_date_cards on status changes; DateChatCard.jsx with instant Approve/Decline(reason). decline_reason shown on Cancelled & refused cards (DeclineNote).
+
+## Re-import (2026-06, GiftsDates26)
+- Re-imported https://github.com/GiftsDates26/GiftsDates26 as-is (all code, styling, assets, logins). Env re-provisioned: JWT_SECRET, EMERGENT_LLM_KEY, ADMIN_EMAILS, PUBLIC_APP_URL, new Stripe claimable sandbox acct_1URguZDebiLV4yO2 (test mode, expires 2026-12-19 unless claimed).
+- Admin giftsdates@gmail.com + test user created (test_credentials.md). iteration_34: backend 31/31, frontend 100%, real test payment credited 100 coins.
+- Not configured: email (Resend), Twilio SMS, Google Maps key. Old users/data live in the old database.
