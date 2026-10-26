@@ -4756,6 +4756,38 @@ async def _vs_apply_time(b: dict, date: str, start: str, end: str, cs: int, ce: 
         "scheduled_at": f"{date}T{start}:00", "rescheduled_at": _iso(), "reminder_24_sent": False, "reminder_1h_sent": False},
         "$unset": {"reschedule_proposal": ""}})
 
+@api.get("/vip/schedule/bookings/{bid}/suggest")
+async def vs_suggest_times(bid: str, n: int = 3, user=Depends(get_current_user)):
+    """Nearest free start times (same length) from the VIP's calendar, for a quick new-time proposal."""
+    b = await db.vip_sched.find_one({"id": bid}, {"_id": 0})
+    if not b:
+        raise HTTPException(404, "Not found")
+    if user["id"] not in (b["vip_id"], b["requester_id"]):
+        raise HTTPException(403, "Forbidden")
+    S0, E0 = _hm_to_min(b["start"]), _hm_to_min(b["end"])
+    dur = (E0 - S0) % 1440 or 60
+    blocks = await db.vip_avail.find({"vip_id": b["vip_id"], "date": {"$gte": (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")}},
+                                     {"_id": 0}).sort([("date", 1), ("start", 1)]).to_list(300)
+    out, tries = [], 0
+    for bl in blocks:
+        S, E = _vs_win(bl)
+        m = S + (-S % 15)
+        while m + dur <= E and len(out) < min(n, 6) and tries < 400:
+            st, en = _min_to_hm(m % 1440), _min_to_hm((m + dur) % 1440)
+            tries += 1
+            if not (bl["date"] == b["date"] and st == b["start"]):
+                try:
+                    await _vs_check_new_time(b, bl["date"], st, en)
+                    out.append({"date": bl["date"], "start": st, "end": en, "tz": bl.get("tz") or b.get("tz")})
+                    m += dur + VIP_SCHED_BUFFER
+                    continue
+                except HTTPException:
+                    pass
+            m += 15
+        if len(out) >= min(n, 6):
+            break
+    return {"suggestions": out}
+
 @api.post("/vip/schedule/bookings/{bid}/reschedule")
 async def vs_reschedule(bid: str, req: VipRescheduleReq, user=Depends(get_current_user)):
     b = await db.vip_sched.find_one({"id": bid}, {"_id": 0})

@@ -242,6 +242,11 @@ export default function VipBookings() {
   };
   const confirm = (id) => act(async () => { await api.post(`/vip/schedule/bookings/${id}/confirm`); toast.success(t("vb_confirmed_toast", lang)); }, id);
   const [declineFor, setDeclineFor] = useState(null);
+  const [suggest, setSuggest] = useState([]);
+  useEffect(() => {
+    setSuggest([]);
+    if (declineFor) api.get(`/vip/schedule/bookings/${declineFor}/suggest`).then((r) => setSuggest(r.data.suggestions || [])).catch(() => {});
+  }, [declineFor]);
   const decline = (id) => setDeclineFor(id);
   const doDecline = (id, reason) => act(async () => { await api.post(`/vip/schedule/bookings/${id}/decline`, null, { params: { reason } }); toast.success(t("vb_declined_toast", lang)); }, id);
   const cancel = (b, who) => setCancelFor({ b, who });
@@ -314,6 +319,11 @@ export default function VipBookings() {
         warning={(() => { const b = pending.find((x) => x.id === declineFor); if (!b) return null; const total = b.coins || 0, taxi = b.taxi_coins || 0;
           return t("dl_vip_warning", lang).replace("{o}", b.requester?.name || "").replace("{total}", total).replace("{date}", total - taxi) + (taxi > 0 ? t("dl_vip_taxi", lang).replace("{taxi}", taxi) : ""); })()}
         onPropose={() => { const b = pending.find((x) => x.id === declineFor); if (b) setReschedule(b); }}
+        suggestions={suggest}
+        onPickSuggestion={async (s) => {
+          try { await api.post(`/vip/schedule/bookings/${declineFor}/reschedule`, { date: s.date, start: s.start, end: s.end }); toast.success(t("dl_quick_sent", lang)); await load(); }
+          catch (e) { toast.error(e.response?.data?.detail || "Error"); throw e; }
+        }}
         proposeHint={(() => { const b = pending.find((x) => x.id === declineFor); return b ? t("dl_propose_hint_n", lang).replace("{n}", (b.coins || 0) - (b.taxi_coins || 0)) : null; })()} />
       <CancelPreviewDialog open={!!cancelFor} onOpenChange={(o) => !o && setCancelFor(null)} total={cancelFor?.b.coins || 0} taxi={cancelFor?.b.taxi_coins || 0}
         byRequester={cancelFor?.who === "outgoing"} onConfirm={() => { const id = cancelFor.b.id; setCancelFor(null); doCancel(id); }} />
