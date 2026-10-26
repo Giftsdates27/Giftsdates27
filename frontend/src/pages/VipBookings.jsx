@@ -7,6 +7,7 @@ import { api } from "../lib/api";
 import { useApp } from "../context/AppContext";
 import VipAvailabilityEditor from "../components/VipAvailabilityEditor";
 import VipDateBookModal from "../components/VipDateBookModal";
+import CancelLossNote from "../components/CancelLossNote";
 import AddToCalendar from "../components/AddToCalendar";
 import CancelPreviewDialog from "../components/CancelPreviewDialog";
 import DirectionsButton from "../components/DirectionsButton";
@@ -189,6 +190,7 @@ function BookingCard({ b, who, onConfirm, onDecline, onCancel, onReschedule, onR
         )}
       </div>
     </div>
+    {who === "outgoing" && ["pending", "confirmed"].includes(b.status) && now < start.getTime() && <div className="mt-3"><CancelLossNote total={b.coins || 0} taxi={b.taxi_coins || 0} testid={`vs-cancel-loss-${b.id}`} /></div>}
     {b.reschedule_proposal && ["pending", "confirmed"].includes(b.status) && <RescheduleProposal b={b} who={who} onDone={onReload} />}
     {b.status === "declined" && <DeclineNote reason={b.decline_reason} testid={`vs-decline-reason-${b.id}`} />}
     {b.status === "reported" && <NoShowCase b={b} who={who} onDone={onReload} />}

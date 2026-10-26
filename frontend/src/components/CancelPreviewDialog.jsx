@@ -3,10 +3,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useApp } from "../context/AppContext";
 import { t } from "../lib/i18n";
 
+// Same rounding as the server (Python round: halves go to the even number).
+const pyRound = (x) => { const f = Math.floor(x), d = x - f; return d > 0.5 || (d === 0.5 && f % 2 !== 0) ? f + 1 : f; };
+
 // byRequester: the person who sent/paid cancels -> 50% back, 25% other side, 25% fee; otherwise full refund.
 export const cancelSplit = (total, byRequester, taxi = 0) => {
   if (!byRequester) return { refund: total, comp: 0, fee: 0 };
-  const base = total - taxi, refund = Math.round(base * 0.5), comp = Math.round(base * 0.25);
+  const base = total - taxi, refund = pyRound(base * 0.5), comp = pyRound(base * 0.25);
   return { refund: refund + taxi, comp, fee: base - refund - comp };
 };
 

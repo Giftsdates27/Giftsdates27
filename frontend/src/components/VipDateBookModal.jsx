@@ -11,6 +11,7 @@ import { api } from "../lib/api";
 import { useApp } from "../context/AppContext";
 import TimeChooser from "./TimeChooser";
 import ExtraHoursStepper from "./ExtraHoursStepper";
+import CancelLossNote from "./CancelLossNote";
 import { minHm } from "../lib/availability";
 import { EXTRA_HOUR_MIN } from "../lib/vipCatalog";
 import { t } from "../lib/i18n";
@@ -171,6 +172,7 @@ export default function VipDateBookModal({ open, onOpenChange, target, reschedul
             </div>
             <div className="border-t border-white/10 px-6 py-4 space-y-3 bg-[#14111c]" data-testid="vs-book-footer">
               {!isReschedule && <PriceSummary lang={lang} length={length} extra={extra} rate={rate} extraPrice={extraPrice} total={total} />}
+              {!isReschedule && <CancelLossNote total={total} testid="vs-book-cancel-loss" />}
               {slot && <div className="text-xs text-slate-300 font-mono-num text-center" data-testid="vs-book-chosen">{fmtDay(day)} · {t("bk_start", lang)} {slot.start} → {t("bk_finish", lang)} {slot.end}</div>}
               {!isReschedule && (
                 <label className={`flex items-start gap-2 cursor-pointer rounded-lg border px-2.5 py-2 text-xs transition-colors ${agree ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-100" : "border-amber-500/40 bg-amber-500/5 text-slate-200"}`}>
