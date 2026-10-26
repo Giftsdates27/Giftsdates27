@@ -23,7 +23,6 @@ import { t } from "../lib/i18n";
 import { MapsLink } from "../components/AddressPicker";
 import { UnverifiedNote } from "../components/VerifiedAddressForm";
 import { placeLabel } from "../lib/vipCatalog";
-import CancelledDates from "../components/CancelledDates";
 import DateBookingList from "../components/DateBookingList";
 import { DatesStatTiles, DatesTabBar, TabEmpty } from "../components/DatesUI";
 import { DATE_TABS, tabOf, countByTab } from "../lib/dateFilters";
@@ -280,13 +279,14 @@ export default function VipBookings() {
 
       <TodayStrip items={todayItems} />
 
-      <DatesStatTiles value={tab} onChange={setTab} counts={counts} testidPrefix="vs" />
-      <DatesTabBar value={tab} onChange={setTab} counts={counts} testidPrefix="vs">
-        <button type="button" role="tab" aria-selected={tab === "availability"} onClick={() => setTab("availability")} data-testid="vs-tab-availability"
-          className={`shrink-0 ms-auto inline-flex items-center rounded-full px-4 py-2 text-sm border transition-colors ${tab === "availability" ? "bg-amber-500/15 border-amber-400/60 text-amber-100" : "border-amber-500/30 text-amber-300 hover:bg-amber-500/10"}`}>
+      <div className="flex justify-end mb-3">
+        <button type="button" aria-selected={tab === "availability"} onClick={() => setTab("availability")} data-testid="vs-tab-availability"
+          className={`inline-flex items-center rounded-full px-4 py-2 text-sm border transition-colors ${tab === "availability" ? "bg-amber-500/15 border-amber-400/60 text-amber-100" : "border-amber-500/30 text-amber-300 hover:bg-amber-500/10"}`}>
           <CalendarDays size={14} className="me-1.5" />{t("vb_availability", lang)}
         </button>
-      </DatesTabBar>
+      </div>
+      <DatesStatTiles value={tab} onChange={setTab} counts={counts} testidPrefix="vs" />
+      <DatesTabBar value={tab} onChange={setTab} counts={counts} testidPrefix="vs" />
 
       {tab === "availability" ? (
         <div className="mt-6" data-testid="vs-panel-availability">
@@ -305,7 +305,6 @@ export default function VipBookings() {
           </div>}
           <DateBookingList mode="vip" onItems={setBooked} tab={tab} />
           {booked && shown.length + bookedShown === 0 && <TabEmpty tab={tab} />}
-          {tab === "cancelled" && <CancelledDates />}
         </div>
       )}
 

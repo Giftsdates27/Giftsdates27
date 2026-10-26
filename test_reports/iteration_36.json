@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 36: I re-tested the 5 fixes from iteration 35 and tested the new VIP dashboard on /vip-bookings. Backend: 29 of 29 pytest tests pass (7 new in test_iter36_vip_dashboard.py plus 22 from iteration 35). All 5 iteration-35 fixes are confirmed in both the API and the UI. The VIP dashboard works: the 6 tiles and tabs sort bookings into the right tabs and their counts match the cards shown; it was checked with a VIP who has bookings in every tab and with a non-VIP client. The URL ?tab= sync and deep links work, the Availability tab shows the editor for a VIP and the upsell for a non-VIP, and the Invited you / You booked tags are correct. Card actions work in the dashboard: confirm, opening the cancel dialog, VIP reschedule (the booking's own slot can be picked), withdraw, and the client accepting a VIP proposal. The /dates dashboard still works. 3 minor issues were found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "VipBookings auto-open tab", "issue": "When Requests is empty, the page opens the wrong tab. It ignores price-list VIP bookings (db.date_bookings with vip=true). Cause: on mount, DateBookingList calls onItems([]) before its /dates fetch finishes, so `booked` is [] and the auto-pick effect (VipBookings.jsx line ~230) runs at once. Reproduced: client test_i36_a has requests=0, mine=1 (a price-list booking only) and confirmed=2, but the page opened Confirmed instead of My Requests.", "selector": "[data-testid=vs-panel-mine]", "priority": "MEDIUM"},
+      {"component": "VipDateBookModal (reschedule mode, VIP proposer)", "issue": "When the VIP proposes a new time, the success toast says 'New time proposed — waiting for VIP confirmation' (bk_resched_sent). It should say the other person has to accept, for example rsch_sent. This also happens when the client proposes on a confirmed booking (it is a proposal, not an instant change), so the wording only fits the pending/instant case.", "selector": "[data-testid=vs-book-submit]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/vip-bookings tab bar (desktop 1920)", "issues": ["The Availability pill (vs-tab-availability) does not fit in the max-w-5xl row. Only its icon or 'Av' shows at the right edge. After you click it the bar scrolls and Requests is clipped to 's 2'. Fix: let the bar wrap, shorten the labels, or put Availability on its own row.", "The 'CANCELLED & REFUS…' tile label is truncated at lg:grid-cols-6 (same on /dates)."]},
+      {"screen": "/vip-bookings Cancelled tab", "issue_note": "From reading the code only (not reproduced): <CancelledDates/> lists regular cancelled invites from /invites/cancelled. Those are not VIP bookings and are not counted in vs-tile-count-cancelled, so the panel can show the dates-empty-cancelled message and that list at the same time.", "issues": ["Counts may not match the list when the user has cancelled regular invites"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter36_vip_dashboard.py", "/app/backend/tests/test_reschedule_iter35.py", "/app/backend/tests/seed_iter36_ui.py", "/app/test_reports/pytest/iter36.xml"],
+  "action_items": [
+    "VipBookings auto-open: wait until DateBookingList has actually loaded before picking the first non-empty tab. For example, have DateBookingList call onItems only after its fetch resolves, or pass a loaded flag.",
+    "Use a neutral 'waiting for the other person to accept' toast (rsch_sent) when the VIP proposes a new time, or when the client proposes on a confirmed booking, in VipDateBookModal",
+    "Fix the Availability pill overflow on the /vip-bookings tab bar at desktop width",
+    "Optional: on the VIP Cancelled tab, either leave out CancelledDates (regular invites) or count those items, so the tile count and the empty state stay consistent"
+  ],
+  "critical_code_review_comments": [
+    "VipBookings.jsx auto-pick effect depends on `booked`, but `booked` is [] right after mount (DateBookingList onItems fires before its fetch). This is a race condition, not just a cosmetic issue.",
+    "VipBookings.jsx: the outgoing reschedule passes target name reschedule.vip_card?.name. For incoming bookings (the VIP rescheduling its own booking) vip_card is undefined, so 'VIP' is shown. This works but is generic.",
+    "DateBookingList price-list rows have no vs-dir-{id} tag (they use their own INVITED YOU / YOU BOOKED badge). The tagging is consistent visually, but the testids differ."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter36_vip_dashboard.py", "/app/backend/tests/seed_iter36_ui.py"],
+  "success_rate": {"backend": "100% (29/29)", "frontend": "~92% (all flows work; 1 auto-open race, 1 toast wording issue, 1 layout overflow)"},
+  "test_credentials": "test_i36_v@example.com (VIP), test_i36_a@example.com (client), test_i36_w@example.com (VIP) / Test@12345; test_rs35_a/b/v@example.com / Test@12345",
+  "seed_data_creation": "seed_iter36_ui.py creates V with an incoming pending, confirmed, declined, cancelled, reported and completed booking, one outgoing pending booking (to W), and one price-list vip=true booking from A. It is re-runnable (it deletes old data first). seed_iter35_ui.py was re-run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The server clock is 2026-10-26. Run pytest with -n0. For UI login, get a token via page.request.post('/api/auth/login') (urllib returns 403) and set localStorage gd_token. Expected tiles after running seed_iter36_ui.py, for V: requests 2 / mine 1 / confirmed 1 / review 1 / cancelled 2 / past 1. For A: requests 0 / mine 2 / confirmed 1 / review 1 / cancelled 2 / past 1. VIP reschedule quick-time testids: vs-book-day-{date}, vs-book-time-quick-HH:MM, vs-book-submit."
+}

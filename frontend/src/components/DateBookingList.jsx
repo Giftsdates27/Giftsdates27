@@ -52,7 +52,8 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
   const inputRef = useRef();
   const uploadingFor = useRef(null);
 
-  const load = () => api.get("/dates").then(r => setData(r.data));
+  const [loaded, setLoaded] = useState(false);
+  const load = () => api.get("/dates").then(r => { setData(r.data); setLoaded(true); });
   useEffect(() => { load(); const iv = setInterval(load, 15000); return () => clearInterval(iv); }, []);
 
   const matches = (b) => (mode === "vip" ? !!b.vip : !b.vip);
@@ -61,7 +62,7 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
   const all = [...incoming.map(b => ({ b, inc: true })), ...outgoing.map(b => ({ b, inc: false }))]
     .sort((x, y) => String(x.b.scheduled_at).localeCompare(String(y.b.scheduled_at)));
   const statusKey = all.map(x => `${bookingStatus(x.b)}:${x.inc}`).join(",");
-  useEffect(() => { onItems?.(all.map(x => ({ id: x.b.id, status: bookingStatus(x.b), inc: x.inc, start: x.b.scheduled_at, name: x.inc ? x.b.from_name : x.b.to_name, place: x.b.venue }))); }, [statusKey]); // eslint-disable-line
+  useEffect(() => { if (!loaded) return; onItems?.(all.map(x => ({ id: x.b.id, status: bookingStatus(x.b), inc: x.inc, start: x.b.scheduled_at, name: x.inc ? x.b.from_name : x.b.to_name, place: x.b.venue }))); }, [statusKey, loaded]); // eslint-disable-line
   const shown = all.filter(x => tab ? tabOf(bookingStatus(x.b), x.inc) === tab : matchesFilter(x.b.status, filter));
 
   const [cancelFor, setCancelFor] = useState(null);

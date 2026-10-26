@@ -59,7 +59,7 @@ export function DatesStatTiles({ value, onChange, counts, testidPrefix = "dates"
           className={`text-start rounded-xl border px-4 py-3 transition-[background-color,border-color,transform] duration-200 hover:-translate-y-0.5 ${on ? m.ring : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"}`}>
           <Icon size={15} className={m.tone} />
           <div className={`font-mono-num text-3xl mt-1 ${on ? "text-white" : m.tone}`} data-testid={`${testidPrefix}-tile-count-${k}`}>{counts[k] || 0}</div>
-          <div className="text-[10px] uppercase tracking-wider text-slate-500 truncate">{t(m.label, lang)}</div>
+          <div className="text-[10px] uppercase tracking-wider text-slate-500 leading-tight">{t(m.label, lang)}</div>
         </button>
       ); })}
     </div>

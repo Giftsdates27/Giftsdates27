@@ -86,8 +86,8 @@ export default function VipDateBookModal({ open, onOpenChange, target, reschedul
     setBusy(true);
     try {
       if (isReschedule) {
-        await api.post(`/vip/schedule/bookings/${rescheduleId}/reschedule`, { date: day, start: slot.start, end: slot.end });
-        toast.success(t("bk_resched_sent", lang));
+        const r = await api.post(`/vip/schedule/bookings/${rescheduleId}/reschedule`, { date: day, start: slot.start, end: slot.end });
+        toast.success(t(r.data?.proposal ? "rsch_sent" : "bk_resched_sent", lang));
       } else {
         await api.post(`/vip/schedule/${target.id}/book`, { date: day, start: slot.start, end: slot.end, length, venue: place ? placeLabel(place, lang) : "", tz: dayObj?.tz,
           place, ...(place && place !== "own" ? addrPayload(loc) : {}) });
