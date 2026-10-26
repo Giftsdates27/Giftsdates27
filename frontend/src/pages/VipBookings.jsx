@@ -1,9 +1,7 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import { Button } from "../components/ui/button";
-import { Badge } from "../components/ui/badge";
-import { Calendar, Clock, Check, X, Crown, Loader2, CalendarClock, Inbox, Send, Ban, MapPin, CalendarDays } from "lucide-react";
+import { Calendar, Clock, Check, X, Crown, Loader2, CalendarClock, MapPin, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { useApp } from "../context/AppContext";
@@ -26,6 +24,15 @@ import { MapsLink } from "../components/AddressPicker";
 import { UnverifiedNote } from "../components/VerifiedAddressForm";
 import { placeLabel } from "../lib/vipCatalog";
 import CancelledDates from "../components/CancelledDates";
+import DateBookingList from "../components/DateBookingList";
+import { DatesStatTiles, DatesTabBar, TabEmpty } from "../components/DatesUI";
+import { DATE_TABS, tabOf, countByTab } from "../lib/dateFilters";
+
+// VIP calendar statuses → shared dashboard tabs (same buckets as the regular Dates page)
+const VS_MAP = { completed: "COMPLETED", reported: "REPORTED" };
+const vsStatus = (b) => VS_MAP[b.status] || b.status;
+const vsTab = (b, who) => tabOf(vsStatus(b), who === "incoming");
+const DESC_TABS = ["cancelled", "past"];
 
 const fmtDay = (d) => { try { const [y, m, dd] = d.split("-").map(Number); return new Date(y, m - 1, dd).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" }); } catch { return d; } };
 
@@ -95,15 +102,15 @@ function RescheduleProposal({ b, who, onDone }) {
   const when = `${new Date(`${p.date}T00:00:00`).toLocaleDateString(lang, { weekday: "short", day: "numeric", month: "short" })} · ${p.start}–${p.end}`;
   const answer = async (a) => {
     setBusy(true);
-    try { await api.post(`/vip/schedule/bookings/${b.id}/reschedule/${a}`); toast.success(t(a === "accept" ? "rp_accepted" : "rp_declined", lang)); onDone?.(); }
+    try { await api.post(`/vip/schedule/bookings/${b.id}/reschedule/${a}`); toast.success(t(a === "accept" ? "rp_accepted" : canAnswer ? "rp_declined" : "rsch_withdrawn", lang)); onDone?.(); }
     catch (e) { toast.error(e.response?.data?.detail || "Error"); }
     finally { setBusy(false); }
   };
   return (
     <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 flex flex-wrap items-center gap-2 text-xs" data-testid={`vs-resched-proposal-${b.id}`}>
       <CalendarClock size={14} className="text-amber-300" />
-      <span className="text-amber-100">{t(canAnswer ? (byVip ? "rp_vip_asks" : "rp_client_asks") : "rs_waiting", lang)} <b className="font-mono-num">{when}</b></span>
-      {!canAnswer && <Button size="sm" variant="outline" disabled={busy} onClick={() => answer("decline")} className="ms-auto bg-white/5 border-white/15 text-slate-300 h-8" data-testid={`vs-resched-withdraw-${b.id}`}>{t("rs_withdraw", lang)}</Button>}
+      <span className="text-amber-100">{t(canAnswer ? (byVip ? "rp_vip_asks" : "rp_client_asks") : "rsch_waiting", lang)} <b className="font-mono-num">{when}</b></span>
+      {!canAnswer && <Button size="sm" variant="outline" disabled={busy} onClick={() => answer("decline")} className="ms-auto bg-white/5 border-white/15 text-slate-300 h-8" data-testid={`vs-resched-withdraw-${b.id}`}>{t("rsch_withdraw", lang)}</Button>}
       {canAnswer && (
         <div className="flex gap-2 ms-auto">
           <Button size="sm" disabled={busy} onClick={() => answer("accept")} className="bg-emerald-600 hover:bg-emerald-500 text-white border-0 h-8" data-testid={`vs-resched-accept-${b.id}`}>{busy ? <Loader2 size={14} className="animate-spin" /> : <><Check size={14} className="me-1" />{t("rp_accept", lang)}</>}</Button>
@@ -192,20 +199,15 @@ function BookingCard({ b, who, onConfirm, onDecline, onCancel, onReschedule, onR
   );
 }
 
-function Empty({ icon: Icon, text }) {
-  return (
-    <div className="text-center py-12 text-slate-500">
-      <Icon size={30} className="mx-auto mb-3 opacity-60" />
-      <p className="text-sm">{text}</p>
-    </div>
-  );
-}
-
 export default function VipBookings() {
   const { refreshUser, lang } = useApp();
   const nav = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState(searchParams.get("tab"));
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = [...DATE_TABS, "availability"].includes(searchParams.get("tab")) ? searchParams.get("tab") : null;
+  const [tab, setTabState] = useState(urlTab || "requests");
+  const setTab = (k) => { setTabState(k); setSearchParams({ tab: k }, { replace: true }); };
+  const [booked, setBooked] = useState(null);
+  const picked = useRef(!!urlTab);
   const [sched, setSched] = useState(null);
   const [mine, setMine] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -224,7 +226,14 @@ export default function VipBookings() {
     } catch { /* ignore */ } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); const iv = setInterval(load, 20000); return () => clearInterval(iv); }, [load]);
+  useEffect(() => {
+    if (picked.current || loading || !booked) return;
+    picked.current = true;
+    const its = [...[...(sched?.pending || []), ...(sched?.confirmed || []), ...(sched?.past || [])].map((b) => ({ status: vsStatus(b), inc: true })), ...mine.map((b) => ({ status: vsStatus(b), inc: false })), ...booked];
+    const c = countByTab(its);
+    if (!c.requests) { const first = DATE_TABS.find((k) => c[k]); if (first) setTabState(first); }
+  }, [loading, booked]); // eslint-disable-line
 
   const act = async (fn, id) => {
     setBusyId(id);
@@ -242,87 +251,63 @@ export default function VipBookings() {
   const isVip = sched?.is_vip;
   const pending = sched?.pending || [];
   const confirmed = sched?.confirmed || [];
-  const CLOSED = ["declined", "cancelled"];
-  const past = (sched?.past || []).filter((b) => !CLOSED.includes(b.status));
-  const closedIn = (sched?.past || []).filter((b) => CLOSED.includes(b.status));
-  const mineActive = mine.filter((m) => ["pending", "confirmed", "reported", "completed"].includes(m.status));
-  const closedOut = mine.filter((m) => CLOSED.includes(m.status));
-  const closedCount = closedIn.length + closedOut.length;
-  const closedList = (
-    <div className="space-y-3" data-testid="vs-cancelled-list">
-      {closedCount === 0 ? <Empty icon={Ban} text={t("vb_none_cancelled", lang)} /> : (
-        <>
-          {closedIn.map((b) => <BookingCard key={b.id} b={b} who="incoming" busyId={busyId} />)}
-          {closedOut.map((b) => <BookingCard key={b.id} b={b} who="outgoing" busyId={busyId} />)}
-        </>
-      )}
-    </div>
-  );
-
-  const cards = (list, who) => list.map((b) => (
-    <BookingCard key={b.id} b={b} who={who} onConfirm={confirm} onDecline={decline} onCancel={cancel} onReschedule={setReschedule} onReload={load} busyId={busyId} />
-  ));
-  const tabs = [
-    ...(isVip ? [{ v: "requests", label: t("vb_requests", lang), icon: Inbox, n: pending.length, hot: true, body: pending.length ? cards(pending, "incoming") : <Empty icon={Inbox} text={t("vb_none_pending", lang)} /> }] : []),
-    { v: "mine", label: t("vb_mine", lang), icon: Send, n: mineActive.length, body: mineActive.length ? cards(mineActive, "outgoing") : <Empty icon={Send} text={t("vb_none_mine", lang)} /> },
-    ...(isVip ? [{ v: "confirmed", label: t("vb_confirmed", lang), icon: CalendarClock, n: confirmed.length, body: confirmed.length ? cards(confirmed, "incoming") : <Empty icon={CalendarClock} text={t("vb_none_confirmed", lang)} /> }] : []),
-    { v: "cancelled", label: t("vb_cancel_refused", lang), icon: Ban, n: closedCount, body: closedList },
-    ...(isVip ? [{ v: "past", label: t("vb_past", lang), icon: Calendar, n: past.length, body: past.length ? cards(past, "incoming") : <Empty icon={Calendar} text={t("vb_none_past", lang)} /> }] : []),
-    { v: "availability", label: t("vb_availability", lang), icon: CalendarDays, body: isVip ? <VipAvailabilityEditor blocks={sched?.blocks || []} onChanged={load} /> : <VipUpsell onGo={() => nav("/wallet?premium=1")} /> },
-  ];
+  const incomingAll = [...pending, ...confirmed, ...(sched?.past || [])];
+  const items = [...incomingAll.map((b) => ({ b, who: "incoming" })), ...mine.map((b) => ({ b, who: "outgoing" }))];
+  const counts = countByTab([...items.map((x) => ({ status: vsStatus(x.b), inc: x.who === "incoming" })), ...(booked || [])]);
+  const shown = items.filter((x) => vsTab(x.b, x.who) === tab)
+    .sort((x, y) => (DESC_TABS.includes(tab) ? -1 : 1) * `${x.b.date}T${x.b.start}`.localeCompare(`${y.b.date}T${y.b.start}`));
+  const bookedShown = (booked || []).filter((x) => tabOf(x.status, x.inc) === tab).length;
   const earn = sched?.earnings || { earned: 0, held: 0 };
-  const todayItems = [...pending.map((b) => ({ b, who: "incoming" })), ...confirmed.map((b) => ({ b, who: "incoming" })), ...past.map((b) => ({ b, who: "incoming" })), ...mineActive.map((b) => ({ b, who: "outgoing" }))];
-  const stats = isVip
-    ? [[t("vb_requests", lang), pending.length, "text-rose-300"], [t("vb_confirmed", lang), confirmed.length, "text-emerald-300"], [t("vb_mine", lang), mineActive.length, "text-sky-300"], [t("vb_past", lang), past.length, "text-slate-300"]]
-    : [[t("vb_mine", lang), mineActive.length, "text-sky-300"], [t("vb_cancel_refused", lang), closedCount, "text-slate-300"]];
+  const todayItems = items.filter((x) => ["pending", "confirmed", "completed"].includes(x.b.status));
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      <header className="space-y-5 mb-6">
+    <div className="max-w-5xl mx-auto px-4 py-8" data-testid="vip-bookings-page">
+      <header className="mb-6 grid gap-4 md:grid-cols-[1fr_300px] items-end">
         <div>
           <div className="text-[11px] uppercase tracking-[0.25em] text-amber-300/80 mb-1.5">GiftsDates · VIP</div>
-          <h1 className="font-serif-luxe text-4xl gold-text flex items-center gap-2.5"><Crown size={28} className="text-amber-300" /> {t("vb_title", lang)}</h1>
+          <h1 className="font-serif-luxe text-4xl sm:text-5xl gold-text flex items-center gap-2.5"><Crown size={28} className="text-amber-300" /> {t("vb_title", lang)}</h1>
           <p className="text-sm text-slate-400 mt-1.5">{t("vb_intro", lang)}</p>
         </div>
-        <div className={`grid gap-2 ${isVip ? "grid-cols-2 sm:grid-cols-6" : "grid-cols-2 sm:grid-cols-4"}`}>
         {isVip && (
-          <div className="col-span-2 rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-transparent px-4 py-2.5" data-testid="vs-earnings-tile">
+          <div className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-transparent px-4 py-2.5" data-testid="vs-earnings-tile">
             <div className="text-[10px] uppercase tracking-wider text-amber-300/80">{t("er_month", lang)}</div>
             <div className="font-mono-num text-2xl leading-tight text-amber-200 mt-0.5" data-testid="vs-earnings-month">🪙 {earn.earned.toLocaleString()}</div>
             <div className="text-[11px] text-slate-400 mt-1" data-testid="vs-earnings-held">🔒 {earn.held.toLocaleString()} · {t("er_held", lang)}</div>
             {earn.by_month?.length > 0 && <EarningsChart data={earn.by_month} />}
           </div>
         )}
-        <div className="contents" data-testid="vs-stats">
-          {stats.map(([label, n, c]) => (
-            <div key={label} className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 flex flex-col justify-center gap-2">
-              <div className={`font-mono-num text-4xl leading-none ${c}`}>{n}</div>
-              <div className="text-[10px] uppercase tracking-wider text-slate-500 mt-1.5 truncate">{label}</div>
-            </div>
-          ))}
-        </div>
-        </div>
       </header>
 
       <TodayStrip items={todayItems} />
 
-      <Tabs value={tabs.some((x) => x.v === tab) ? tab : tabs[0].v} onValueChange={setTab} className="w-full">
-        <div className="sticky top-16 z-20 -mx-4 px-4 py-2 bg-[#0D0B12]/85 backdrop-blur-xl border-b border-white/10">
-          <TabsList className="bg-transparent p-0 h-auto w-full justify-start gap-1 overflow-x-auto flex-nowrap" data-testid="vs-tabs">
-            {tabs.map(({ v, label, icon: Icon, n, hot }) => (
-              <TabsTrigger key={v} value={v} data-testid={`vs-tab-${v}`}
-                className="shrink-0 rounded-full px-4 py-2 text-sm text-slate-400 border border-transparent hover:text-white transition-colors data-[state=active]:bg-white/[0.07] data-[state=active]:border-amber-400/40 data-[state=active]:text-amber-100 data-[state=active]:shadow-none">
-                <Icon size={14} className="me-1.5" />{label}
-                {n > 0 && <span className={`ms-1.5 text-[10px] rounded-full px-1.5 py-0.5 font-mono-num ${hot ? "bg-rose-500 text-white" : "bg-white/10 text-slate-200"}`}>{n}</span>}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </div>
-        {tabs.map(({ v, body }) => (
-          <TabsContent key={v} value={v} className="mt-6 space-y-3" data-testid={`vs-panel-${v}`}>{body}</TabsContent>
-        ))}
-      </Tabs>
+      <DatesStatTiles value={tab} onChange={setTab} counts={counts} testidPrefix="vs" />
+      <DatesTabBar value={tab} onChange={setTab} counts={counts} testidPrefix="vs">
+        <button type="button" role="tab" aria-selected={tab === "availability"} onClick={() => setTab("availability")} data-testid="vs-tab-availability"
+          className={`shrink-0 ms-auto inline-flex items-center rounded-full px-4 py-2 text-sm border transition-colors ${tab === "availability" ? "bg-amber-500/15 border-amber-400/60 text-amber-100" : "border-amber-500/30 text-amber-300 hover:bg-amber-500/10"}`}>
+          <CalendarDays size={14} className="me-1.5" />{t("vb_availability", lang)}
+        </button>
+      </DatesTabBar>
 
+      {tab === "availability" ? (
+        <div className="mt-6" data-testid="vs-panel-availability">
+          {isVip ? <VipAvailabilityEditor blocks={sched?.blocks || []} onChanged={load} /> : <VipUpsell onGo={() => nav("/wallet?premium=1")} />}
+        </div>
+      ) : (
+        <div className="mt-6 space-y-6" data-testid={`vs-panel-${tab}`} key={tab}>
+          <p className="text-xs text-slate-500">{t(`dp_hint_${tab}`, lang)}</p>
+          {shown.length > 0 && <div className="space-y-4">
+            {shown.map(({ b, who }) => (
+              <div key={b.id} className="relative">
+                <span className="absolute -top-2 start-4 z-10 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#0D0B12] border border-white/10 text-slate-400" data-testid={`vs-dir-${b.id}`}>{t(who === "incoming" ? "tag_invited_you" : "tag_you_booked", lang)}</span>
+                <BookingCard b={b} who={who} onConfirm={confirm} onDecline={decline} onCancel={cancel} onReschedule={setReschedule} onReload={load} busyId={busyId} />
+              </div>
+            ))}
+          </div>}
+          <DateBookingList mode="vip" onItems={setBooked} tab={tab} />
+          {booked && shown.length + bookedShown === 0 && <TabEmpty tab={tab} />}
+          {tab === "cancelled" && <CancelledDates />}
+        </div>
+      )}
 
       <DeclineReasonDialog open={!!declineFor} onClose={() => setDeclineFor(null)} onConfirm={(r) => doDecline(declineFor, r)} testid="vs-decline-dialog" />
       <CancelPreviewDialog open={!!cancelFor} onOpenChange={(o) => !o && setCancelFor(null)} total={cancelFor?.b.coins || 0} taxi={cancelFor?.b.taxi_coins || 0}
@@ -338,9 +323,6 @@ export default function VipBookings() {
         />
       )}
 
-      <div className="mt-8">
-        <CancelledDates />
-      </div>
     </div>
   );
 }

@@ -322,7 +322,7 @@ function DateCard({ d, reload }) {
         {!TERMINAL.includes(d.status) && d.status !== "PHOTO_VERIFICATION_PENDING" && !(d.status === "INVITATION_SENT" && !isInv) && !started && (
           <Button data-testid={`date-cancel-${d.id}`} disabled={busy} onClick={cancelDate} variant="outline" className="h-9 bg-rose-500/10 border-rose-500/40 text-rose-300 hover:bg-rose-500/20"><X size={14} className="me-1" />{tr("id_cancel_date")}</Button>
         )}
-        {canResched && <Button data-testid={`date-reschedule-${d.id}`} disabled={busy} onClick={() => setReschedOpen(true)} variant="outline" className="h-9 bg-amber-500/10 border-amber-500/40 text-amber-300 hover:bg-amber-500/20"><CalendarClock size={14} className="me-1" />{tr("rs_btn")}</Button>}
+        {canResched && <Button data-testid={`date-reschedule-${d.id}`} disabled={busy} onClick={() => setReschedOpen(true)} variant="outline" className="h-9 bg-amber-500/10 border-amber-500/40 text-amber-300 hover:bg-amber-500/20"><CalendarClock size={14} className="me-1" />{tr("rsch_btn")}</Button>}
         {reschedOpen && <RescheduleDialog open={reschedOpen} onOpenChange={setReschedOpen} ownerId={isInv ? d.other?.id : user?.id} itemId={d.id} url={`/invites/${d.id}/reschedule`} onDone={reload} />}
         {d.reschedule_proposal && RESCHED_STATUSES.includes(d.status) && <RescheduleProposalBar id={d.id} p={d.reschedule_proposal} mine={d.reschedule_proposal.mine} otherName={d.other?.name} url={`/invites/${d.id}/reschedule`} onDone={reload} />}
         {cancelOpen && (() => { const c = cancelInfo(); return (

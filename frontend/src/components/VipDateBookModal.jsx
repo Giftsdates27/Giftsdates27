@@ -58,11 +58,11 @@ export default function VipDateBookModal({ open, onOpenChange, target, reschedul
   const load = useCallback(() => {
     if (!target?.id) return;
     setLoading(true);
-    api.get(`/vip/schedule/${target.id}/slots`)
+    api.get(`/vip/schedule/${target.id}/slots`, { params: rescheduleId ? { exclude: rescheduleId } : {} })
       .then((r) => { setData(r.data); setDay((r.data.days || [])[0]?.date || null); })
       .catch(() => setData({ days: [], tz: "UTC", buffer: 15 }))
       .finally(() => setLoading(false));
-  }, [target]);
+  }, [target, rescheduleId]);
 
   useEffect(() => {
     if (!open) return;

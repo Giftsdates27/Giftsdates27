@@ -293,7 +293,7 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
           );
         })()}
         {!b.vip && !started && !underReview && !b.reschedule_proposal && ["escrow", "accepted", "confirmed"].includes(b.status) && (
-          <Button data-testid={`date-reschedule-btn-${b.id}`} disabled={busyId===b.id} onClick={() => setReschedFor(b)} variant="outline" className="bg-amber-500/10 border-amber-500/40 text-amber-300 hover:bg-amber-500/20"><CalendarClock size={14} className="me-1"/> {t("rs_btn", lang)}</Button>
+          <Button data-testid={`date-reschedule-btn-${b.id}`} disabled={busyId===b.id} onClick={() => setReschedFor(b)} variant="outline" className="bg-amber-500/10 border-amber-500/40 text-amber-300 hover:bg-amber-500/20"><CalendarClock size={14} className="me-1"/> {t("rsch_btn", lang)}</Button>
         )}
         {underReview && <span className="text-[11px] px-2 py-1 rounded-full border border-rose-500/40 bg-rose-500/10 text-rose-200 self-center" data-testid={`date-reported-${b.id}`}>{t("rp_under_review", lang)}</span>}
         {canReport && <Button data-testid={`date-report-${b.id}`} onClick={() => setReportFor(v => v === b.id ? null : b.id)} variant="outline" className="bg-rose-500/10 border-rose-500/40 text-rose-300"><Flag size={14} className="me-1" />{t("id_report_this", lang)}</Button>}
@@ -322,7 +322,7 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
       {reschedFor && <RescheduleDialog open={!!reschedFor} onOpenChange={(o) => !o && setReschedFor(null)} ownerId={reschedFor.to_id} itemId={reschedFor.id} url={`/dates/reschedule/${reschedFor.id}`} onDone={load} />}
       <DeclineReasonDialog open={!!declineFor} onClose={() => setDeclineFor(null)} onConfirm={(r) => respond(declineFor, false, null, r)} testid="booking-decline-dialog" />
       <input ref={inputRef} data-testid="photo-verification-upload-input" type="file" accept="image/*" onChange={handleFile} className="hidden"/>
-      {all.length === 0 && mode === "vip" && <EmptyLine text={t("none", lang)} />}
+      {all.length === 0 && mode === "vip" && !tab && <EmptyLine text={t("none", lang)} />}
       {shown.length > 0 && (
         <section data-testid="booked-dates-section">
           <SectionTitle label={t("booked_dates", lang)} count={shown.length} />

@@ -11,7 +11,7 @@ import { toKey, fromKey, minHm, dayWins, openDayKeys, bestDayKeys } from "../lib
 import TimeChooser from "./TimeChooser";
 import AvailabilityOverview from "./AvailabilityOverview";
 
-const ERR = { DAY_UNAVAILABLE: "day_unavailable_err", TIME_PASSED: "err_time_passed", DATE_STARTED: "rs_err_started", CANNOT_RESCHEDULE: "rs_err_cannot" };
+const ERR = { DAY_UNAVAILABLE: "day_unavailable_err", TIME_PASSED: "err_time_passed", DATE_STARTED: "rsch_err_started", CANNOT_RESCHEDULE: "rsch_err_cannot" };
 
 export const rescheduleErr = (d, lang) => {
   if (!d) return t("failed", lang);
@@ -49,7 +49,7 @@ export default function RescheduleDialog({ open, onOpenChange, ownerId, itemId, 
     try {
       const dt = fromKey(day); dt.setHours(0, start, 0, 0);
       await api.post(url, { scheduled_start: dt.toISOString(), local_day: day, local_time: minHm(start) });
-      toast.success(t("rs_sent", lang));
+      toast.success(t("rsch_sent", lang));
       onOpenChange(false); onDone?.();
     } catch (e) { toast.error(rescheduleErr(e.response?.data?.detail, lang)); }
     finally { setBusy(false); }
@@ -59,8 +59,8 @@ export default function RescheduleDialog({ open, onOpenChange, ownerId, itemId, 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-[#161320] border-white/10 text-white max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="reschedule-dialog">
         <DialogHeader>
-          <DialogTitle className="font-serif-luxe text-2xl flex items-center gap-2"><CalendarClock size={20} className="text-amber-300" />{t("rs_title", lang)}</DialogTitle>
-          <DialogDescription className="text-slate-400 text-sm">{t("rs_hint", lang)}</DialogDescription>
+          <DialogTitle className="font-serif-luxe text-2xl flex items-center gap-2"><CalendarClock size={20} className="text-amber-300" />{t("rsch_title", lang)}</DialogTitle>
+          <DialogDescription className="text-slate-400 text-sm">{t("rsch_hint", lang)}</DialogDescription>
         </DialogHeader>
         <AvailabilityOverview avail={avail} selected={day} onPick={(k) => { setDay(k); setStart(null); }} max={8} testid="reschedule-avail" />
         <div className="rounded-xl border border-white/10 bg-white/5 inline-block" data-testid="reschedule-calendar">
@@ -75,8 +75,8 @@ export default function RescheduleDialog({ open, onOpenChange, ownerId, itemId, 
           {!day ? <div className="mt-2 text-xs text-slate-500">{t("pick_day", lang)}…</div>
             : <TimeChooser key={day} day={day} wins={dayWins(avail, day)} taken={(avail.busy_slots || {})[day] || []} value={start} onChange={setStart} testid="reschedule-time" />}
         </div>
-        <p className="text-[11px] text-amber-200/90 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2" data-testid="reschedule-note">{t("rs_note", lang)}</p>
-        <Button data-testid="reschedule-send-button" disabled={busy || !day || start == null} onClick={send} className="rose-btn text-white border-0 w-full h-11">{t("rs_send", lang)}</Button>
+        <p className="text-[11px] text-amber-200/90 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2" data-testid="reschedule-note">{t("rsch_note", lang)}</p>
+        <Button data-testid="reschedule-send-button" disabled={busy || !day || start == null} onClick={send} className="rose-btn text-white border-0 w-full h-11">{t("rsch_send", lang)}</Button>
       </DialogContent>
     </Dialog>
   );

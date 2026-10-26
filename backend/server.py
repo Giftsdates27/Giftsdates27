@@ -2952,6 +2952,9 @@ async def list_dates(user=Depends(get_current_user)):
         if b.get("vip"):
             _hide_own_address(b, b["status"] not in ("escrow", "cancelled", "declined"))
             b["extra_hour_price"] = vip_extra_price(await db.users.find_one({"id": b["to_id"]}, {"_id": 0, "vip.prices": 1}) or {})
+    names = {u["id"]: u.get("name") for u in await db.users.find({"id": {"$in": list({x["from_id"] for x in incoming} | {x["to_id"] for x in outgoing})}}, {"_id": 0, "id": 1, "name": 1}).to_list(500)}
+    for b in incoming: b.setdefault("from_name", names.get(b["from_id"]))
+    for b in outgoing: b.setdefault("to_name", names.get(b["to_id"]))
     return {"outgoing": outgoing, "incoming": incoming}
 
 @api.post("/dates/confirm")
@@ -4062,7 +4065,7 @@ async def vs_del_availability(aid: str, user=Depends(get_current_user)):
     return {"ok": True}
 
 @api.get("/vip/schedule/{vip_id}/slots")
-async def vs_public_slots(vip_id: str, user=Depends(get_current_user)):
+async def vs_public_slots(vip_id: str, exclude: Optional[str] = None, user=Depends(get_current_user)):
     """Public: bookable slots for a VIP, grouped by date, each tagged with a visual state."""
     target = await db.users.find_one({"id": vip_id}, {"_id": 0, "id": 1, "timezone": 1, "vip.prices": 1, "vip.places": 1})
     if not target:
@@ -4070,7 +4073,7 @@ async def vs_public_slots(vip_id: str, user=Depends(get_current_user)):
     await _vs_autocomplete(vip_id)
     today = _vs_today()
     blocks = await db.vip_avail.find({"vip_id": vip_id, "date": {"$gte": today}}, {"_id": 0}).sort([("date", 1), ("start", 1)]).to_list(500)
-    active = await _vs_busy(vip_id)
+    active = await _vs_busy(vip_id, exclude=exclude)
     by_date = {}
     tz = blocks[0]["tz"] if blocks else (target.get("timezone") or "UTC")
     for blk in blocks:
@@ -4709,6 +4712,13 @@ async def _vs_check_new_time(b: dict, date: str, start: str, end: str):
     ns, ne = _hm_to_min(start), _hm_to_min(end)
     if ns == ne:
         raise HTTPException(400, "BAD_TIME")
+    now = datetime.now(timezone.utc)
+    cur = _vs_start_dt(b)
+    if b["status"] == "confirmed" and cur and cur <= now:
+        raise HTTPException(400, "DATE_STARTED")
+    new = _vs_start_dt({"date": date, "start": start, "tz": b.get("tz")})
+    if new and new <= now:
+        raise HTTPException(400, "TIME_PASSED")
     vip_id = b["vip_id"]
     blocks = await db.vip_avail.find({"vip_id": vip_id, "date": date}, {"_id": 0}).to_list(200)
     ref_start = None; cs = ce = None

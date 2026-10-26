@@ -1,0 +1,41 @@
+{
+  "summary": "I tested the reschedule feature end to end (one person proposes a new time, the other accepts, and the proposed time is locked meanwhile) on invite dates, booked dates and VIP calendar bookings. Backend: 21 of 22 pytest tests pass. In the browser, every flow works on /dates (invite card and booked-date row) and on /vip-bookings (client and VIP proposals, accept, keep original, withdraw), and the backend data changes correctly. Issues found: 1) Two i18n keys collide, so the dialog title and the proposer's waiting bar show report-dispute wording. 2) The booked-date proposal bar shows no name. 3) A VIP-booking reschedule proposal can be sent for a time that has already passed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/vip/schedule/bookings/{bid}/reschedule (+ /reschedule/accept)", "issue": "_vs_check_new_time has no TIME_PASSED check. A client or VIP can propose a time that has already passed on a day with VIP availability, e.g. today 00:00-01:00 (got 200), and that proposal can then be accepted. vs_book does check _vs_start_dt <= now. There is also no 'date already started' guard for confirmed VIP bookings on the backend (the UI does hide the button)."},
+      {"endpoint": "GET /api/dates (booking list)", "issue": "Rows never include from_name/to_name, so DateBookingList passes otherName=undefined to RescheduleProposalBar (and to LiveLocation and onItems). The bar reads ' asks to move the date to ...' with a blank name."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "RescheduleDialog title + RescheduleProposalBar + VipBookings RescheduleProposal", "issue": "i18n key collision. 'rs_title' and 'rs_waiting' are defined in i18n_vipsched.js (reschedule text) and also in i18n.js:214 and the rs_waiting line (report-dispute text). i18n.js spreads ...VS_T first, so its own keys override. Result: the dialog title shows 'Report under review — nothing cancelled', and the proposer's waiting bar shows 'The other person has until {t} to reply with their side.' (raw {t} placeholder). Rename the new reschedule keys (e.g. rsch_title, rsch_waiting) and update RescheduleDialog.jsx:62, RescheduleProposalBar.jsx:27 and VipBookings.jsx:105.", "selector": "[data-testid=reschedule-dialog] h2, [data-testid^=resched-proposal-], [data-testid^=vs-resched-proposal-]", "priority": "HIGH"},
+      {"component": "DateBookingList RescheduleProposalBar", "issue": "Other person's name is blank: 'asks to move the date to Sat, Oct 31, 12:30 PM' (backend does not send from_name/to_name)", "selector": "[data-testid^=resched-proposal-]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "VipDateBookModal in reschedule mode", "issues": ["The booking's own current slot (plus buffer) is shown as taken, so nearby start times (e.g. moving 16:00 to 15:00 or 17:00) cannot be picked, even though the backend excludes the booking itself. The /slots endpoint needs an exclude=bookingId option, like profile availability has."]},
+      {"screen": "VipBookings RescheduleProposal", "issue_note": "minor", "issues": ["When the proposer withdraws, the toast says 'rp_declined' instead of 'rs_withdrawn' (RescheduleProposalBar handles this correctly)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_reschedule_iter35.py", "/app/backend/tests/seed_iter35_ui.py", "/app/test_reports/pytest/pytest_iter35.xml"],
+  "action_items": [
+    "Fix the i18n collisions for rs_title and rs_waiting (rename the reschedule keys in i18n_vipsched.js and their 3 uses)",
+    "Return from_name/to_name in the GET /api/dates booking rows (or have DateBookingList use the names it already has)",
+    "Add a TIME_PASSED check (and optionally a started check) to _vs_check_new_time for VIP reschedule proposals and accepts",
+    "Optional: support exclude=bookingId on /vip/schedule/{vip}/slots so the reschedule modal does not block the booking's own slot",
+    "Optional: show the 'withdrawn' toast when the proposer withdraws on /vip-bookings"
+  ],
+  "critical_code_review_comments": [
+    "RescheduleReq does not cross-check that scheduled_start matches local_day/local_time. The availability check uses local_day/local_time while proposed_start is stored from scheduled_start, so a client could send values that do not match.",
+    "invite_reschedule blocks whenever d.get('report') is truthy, even for resolved reports, while the booking side uses _report_open(). This is inconsistent.",
+    "The proposal lock for invites is always DATE_SLOT_MINUTES, which is fine. VIP-schedule proposals do not appear in the regular _taken_blocks (this was already true before this feature for vip_sched)."
+  ],
+  "updated_files": ["/app/backend/tests/test_reschedule_iter35.py", "/app/backend/tests/seed_iter35_ui.py"],
+  "success_rate": {"backend": "95% (21/22)", "frontend": "100% of flows work; 2 text bugs"},
+  "seed_data_creation": "seed_iter35_ui.py creates test_rs35_a/b/v@example.com (password Test@12345). B has weekly availability 10-23 every day; V has vip_until set. It also creates an invite A->B, a booking A->B and a confirmed VIP booking A->V. Re-running it recreates everything. The pytest module creates and cleans up its own TEST_ users.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The server clock is about 2026-10-26, so the backend tests use 2027 dates. Run pytest with -n0 (xdist breaks the shared module state). To log in in the UI, set localStorage gd_token from /api/auth/login. VIP incoming bookings are under vs-tab-confirmed. In the calendar, select a day with button[name=day]:not([disabled]) filtered by text. Quick times use the testids reschedule-time-quick-HH:MM and vs-book-time-quick-HH:MM.",
+  "rca of the issue": "Wrong dialog and bar text: lib/i18n.js line 147 spreads ...VS_T and then defines rs_title and rs_waiting (report-dispute strings) later in the same object, so they override the new reschedule strings. Missing name: GET /api/dates does not enrich booking rows with names. VIP past time accepted: _vs_check_new_time copied the window, conflict and duration checks from vs_book but not its TIME_PASSED check."
+}
