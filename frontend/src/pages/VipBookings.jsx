@@ -310,7 +310,9 @@ export default function VipBookings() {
         </div>
       )}
 
-      <DeclineReasonDialog open={!!declineFor} onClose={() => setDeclineFor(null)} onConfirm={(r) => doDecline(declineFor, r)} testid="vs-decline-dialog" />
+      <DeclineReasonDialog open={!!declineFor} onClose={() => setDeclineFor(null)} onConfirm={(r) => doDecline(declineFor, r)} testid="vs-decline-dialog"
+        warning={(() => { const b = pending.find((x) => x.id === declineFor); if (!b) return null; const total = b.coins || 0, taxi = b.taxi_coins || 0;
+          return t("dl_vip_warning", lang).replace("{o}", b.requester?.name || "").replace("{total}", total).replace("{date}", total - taxi) + (taxi > 0 ? t("dl_vip_taxi", lang).replace("{taxi}", taxi) : ""); })()} />
       <CancelPreviewDialog open={!!cancelFor} onOpenChange={(o) => !o && setCancelFor(null)} total={cancelFor?.b.coins || 0} taxi={cancelFor?.b.taxi_coins || 0}
         byRequester={cancelFor?.who === "outgoing"} onConfirm={() => { const id = cancelFor.b.id; setCancelFor(null); doCancel(id); }} />
       {reschedule && (
