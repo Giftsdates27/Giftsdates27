@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Loader2, X } from "lucide-react";
+import { Loader2, X, CalendarClock } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
@@ -9,7 +9,7 @@ import { t } from "../lib/i18n";
 const QUICK = ["dr_busy", "dr_far", "dr_other_day", "dr_not_ready", "dr_personal"];
 
 // Ask for a quick or typed reason before declining; the reason is sent to the inviter.
-export default function DeclineReasonDialog({ open, onClose, onConfirm, warning, testid = "decline-dialog" }) {
+export default function DeclineReasonDialog({ open, onClose, onConfirm, warning, onPropose, proposeHint, testid = "decline-dialog" }) {
   const { lang } = useApp();
   const [pick, setPick] = useState(null);
   const [text, setText] = useState("");
@@ -35,6 +35,14 @@ export default function DeclineReasonDialog({ open, onClose, onConfirm, warning,
         <Textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={300} rows={3} placeholder={t("dr_type", lang)}
           className="bg-white/5 border-white/10" data-testid={`${testid}-text`} />
         {warning && <div className="text-[11px] text-amber-200/90 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2" data-testid={`${testid}-warning`}>{warning}</div>}
+        {onPropose && (
+          <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 space-y-2" data-testid={`${testid}-propose-box`}>
+            <div className="text-xs text-emerald-100 flex items-start gap-1.5"><CalendarClock size={14} className="mt-0.5 shrink-0 text-emerald-300" />{proposeHint || t("dl_propose_hint", lang)}</div>
+            <Button onClick={() => { close(); onPropose(); }} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white border-0 h-9" data-testid={`${testid}-propose`}>
+              <CalendarClock size={14} className="me-1.5" />{t("dl_propose_btn", lang)}
+            </Button>
+          </div>
+        )}
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={close} className="bg-white/5 border-white/15" data-testid={`${testid}-cancel`}>{t("dr_keep", lang)}</Button>
           <Button disabled={busy || !reason} onClick={send} className="bg-rose-600 hover:bg-rose-500 text-white border-0" data-testid={`${testid}-confirm`}>
