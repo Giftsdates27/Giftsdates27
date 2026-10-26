@@ -8,6 +8,7 @@ import { useApp } from "../context/AppContext";
 import VipAvailabilityEditor from "../components/VipAvailabilityEditor";
 import VipDateBookModal from "../components/VipDateBookModal";
 import CancelLossNote from "../components/CancelLossNote";
+import SuggestedTimes from "../components/SuggestedTimes";
 import AddToCalendar from "../components/AddToCalendar";
 import CancelPreviewDialog from "../components/CancelPreviewDialog";
 import DirectionsButton from "../components/DirectionsButton";
@@ -116,6 +117,13 @@ function RescheduleProposal({ b, who, onDone }) {
           <Button size="sm" disabled={busy} onClick={() => answer("accept")} className="bg-emerald-600 hover:bg-emerald-500 text-white border-0 h-8" data-testid={`vs-resched-accept-${b.id}`}>{busy ? <Loader2 size={14} className="animate-spin" /> : <><Check size={14} className="me-1" />{t("rp_accept", lang)}</>}</Button>
           <Button size="sm" variant="outline" disabled={busy} onClick={() => answer("decline")} className="bg-white/5 border-white/15 text-slate-300 h-8" data-testid={`vs-resched-decline-${b.id}`}>{t("rp_keep", lang)}</Button>
         </div>
+      )}
+      {canAnswer && (
+        <div className="w-full pt-1"><SuggestedTimes url={`/vip/schedule/bookings/${b.id}/suggest`} title="st_counter" tone="amber" testid={`vs-counter-${b.id}`}
+          onPick={async (s) => {
+            try { await api.post(`/vip/schedule/bookings/${b.id}/reschedule`, { date: s.date, start: s.start, end: s.end }); toast.success(t("dl_quick_sent", lang)); onDone?.(); }
+            catch (e) { toast.error(e.response?.data?.detail || "Error"); throw e; }
+          }} /></div>
       )}
     </div>
   );
@@ -242,11 +250,6 @@ export default function VipBookings() {
   };
   const confirm = (id) => act(async () => { await api.post(`/vip/schedule/bookings/${id}/confirm`); toast.success(t("vb_confirmed_toast", lang)); }, id);
   const [declineFor, setDeclineFor] = useState(null);
-  const [suggest, setSuggest] = useState([]);
-  useEffect(() => {
-    setSuggest([]);
-    if (declineFor) api.get(`/vip/schedule/bookings/${declineFor}/suggest`).then((r) => setSuggest(r.data.suggestions || [])).catch(() => {});
-  }, [declineFor]);
   const decline = (id) => setDeclineFor(id);
   const doDecline = (id, reason) => act(async () => { await api.post(`/vip/schedule/bookings/${id}/decline`, null, { params: { reason } }); toast.success(t("vb_declined_toast", lang)); }, id);
   const cancel = (b, who) => setCancelFor({ b, who });
@@ -319,7 +322,7 @@ export default function VipBookings() {
         warning={(() => { const b = pending.find((x) => x.id === declineFor); if (!b) return null; const total = b.coins || 0, taxi = b.taxi_coins || 0;
           return t("dl_vip_warning", lang).replace("{o}", b.requester?.name || "").replace("{total}", total).replace("{date}", total - taxi) + (taxi > 0 ? t("dl_vip_taxi", lang).replace("{taxi}", taxi) : ""); })()}
         onPropose={() => { const b = pending.find((x) => x.id === declineFor); if (b) setReschedule(b); }}
-        suggestions={suggest}
+        suggestUrl={declineFor ? `/vip/schedule/bookings/${declineFor}/suggest` : null}
         onPickSuggestion={async (s) => {
           try { await api.post(`/vip/schedule/bookings/${declineFor}/reschedule`, { date: s.date, start: s.start, end: s.end }); toast.success(t("dl_quick_sent", lang)); await load(); }
           catch (e) { toast.error(e.response?.data?.detail || "Error"); throw e; }

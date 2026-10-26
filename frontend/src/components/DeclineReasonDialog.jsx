@@ -5,12 +5,12 @@ import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { useApp } from "../context/AppContext";
 import { t } from "../lib/i18n";
+import SuggestedTimes from "./SuggestedTimes";
 
 const QUICK = ["dr_busy", "dr_far", "dr_other_day", "dr_not_ready", "dr_personal"];
-const fmtSugDay = (d, lang) => { try { const [y, m, dd] = d.split("-").map(Number); return new Date(y, m - 1, dd).toLocaleDateString(lang, { weekday: "short", day: "numeric", month: "short" }); } catch { return d; } };
 
 // Ask for a quick or typed reason before declining; the reason is sent to the inviter.
-export default function DeclineReasonDialog({ open, onClose, onConfirm, warning, onPropose, proposeHint, suggestions, onPickSuggestion, testid = "decline-dialog" }) {
+export default function DeclineReasonDialog({ open, onClose, onConfirm, warning, onPropose, proposeHint, suggestUrl, onPickSuggestion, testid = "decline-dialog" }) {
   const { lang } = useApp();
   const [pick, setPick] = useState(null);
   const [text, setText] = useState("");
@@ -39,23 +39,9 @@ export default function DeclineReasonDialog({ open, onClose, onConfirm, warning,
         {onPropose && (
           <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 space-y-2" data-testid={`${testid}-propose-box`}>
             <div className="text-xs text-emerald-100 flex items-start gap-1.5"><CalendarClock size={14} className="mt-0.5 shrink-0 text-emerald-300" />{proposeHint || t("dl_propose_hint", lang)}</div>
-            {suggestions?.length > 0 && (
-              <div className="space-y-1.5" data-testid={`${testid}-suggestions`}>
-                <div className="text-[10px] uppercase tracking-wider text-emerald-300/80">{t("dl_quick_times", lang)}</div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
-                  {suggestions.map((s, i) => (
-                    <button key={`${s.date}-${s.start}`} type="button" disabled={busy} onClick={async () => { setBusy(true); try { await onPickSuggestion(s); close(); } finally { setBusy(false); } }}
-                      data-testid={`${testid}-suggestion-${i}`}
-                      className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/25 px-2 py-1.5 text-start transition-colors disabled:opacity-50">
-                      <div className="text-[11px] text-emerald-100 font-medium">{fmtSugDay(s.date, lang)}</div>
-                      <div className="text-[11px] font-mono-num text-white">{s.start}–{s.end}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            {suggestUrl && open && <SuggestedTimes url={suggestUrl} testid={`${testid}-suggestions`} onPick={async (s) => { await onPickSuggestion(s); close(); }} />}
             <Button onClick={() => { close(); onPropose(); }} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white border-0 h-9" data-testid={`${testid}-propose`}>
-              <CalendarClock size={14} className="me-1.5" />{t(suggestions?.length ? "dl_propose_other" : "dl_propose_btn", lang)}
+              <CalendarClock size={14} className="me-1.5" />{t(suggestUrl ? "dl_propose_other" : "dl_propose_btn", lang)}
             </Button>
           </div>
         )}

@@ -12,6 +12,7 @@ import { useApp } from "../context/AppContext";
 import TimeChooser from "./TimeChooser";
 import ExtraHoursStepper from "./ExtraHoursStepper";
 import CancelLossNote from "./CancelLossNote";
+import SuggestedTimes from "./SuggestedTimes";
 import { minHm } from "../lib/availability";
 import { EXTRA_HOUR_MIN } from "../lib/vipCatalog";
 import { t } from "../lib/i18n";
@@ -122,6 +123,17 @@ export default function VipDateBookModal({ open, onOpenChange, target, reschedul
         ) : (
           <>
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+              {isReschedule && open && (
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
+                  <SuggestedTimes url={`/vip/schedule/bookings/${rescheduleId}/suggest`} title="st_resched_quick" testid="vs-book-suggest"
+                    onPick={async (s) => {
+                      try {
+                        const r = await api.post(`/vip/schedule/bookings/${rescheduleId}/reschedule`, { date: s.date, start: s.start, end: s.end });
+                        toast.success(t(r.data?.proposal ? "rsch_sent" : "bk_resched_sent", lang)); onDone?.(); onOpenChange(false);
+                      } catch (e) { const d = e.response?.data?.detail || ""; toast.error(ERR[d] ? t(ERR[d], lang) : d || "Error"); throw e; }
+                    }} />
+                </div>
+              )}
               <Step n={++n} icon={Calendar} title={t("bk_choose_day", lang)} testid="vs-book-step-day">
                 <div className="space-y-1.5 max-h-56 overflow-y-auto pe-1" data-testid="vs-book-days">
                   {data.days.map((d) => (

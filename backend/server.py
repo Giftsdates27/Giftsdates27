@@ -4775,7 +4775,8 @@ async def vs_suggest_times(bid: str, n: int = 3, user=Depends(get_current_user))
         while m + dur <= E and len(out) < min(n, 6) and tries < 400:
             st, en = _min_to_hm(m % 1440), _min_to_hm((m + dur) % 1440)
             tries += 1
-            if not (bl["date"] == b["date"] and st == b["start"]):
+            prop = b.get("reschedule_proposal") or {}
+            if not (bl["date"] == b["date"] and st == b["start"]) and not (bl["date"] == prop.get("date") and st == prop.get("start")):
                 try:
                     await _vs_check_new_time(b, bl["date"], st, en)
                     out.append({"date": bl["date"], "start": st, "end": en, "tz": bl.get("tz") or b.get("tz")})
@@ -6048,6 +6049,50 @@ async def booking_reschedule_answer(bid: str, answer: str, user=Depends(get_curr
     if p["by"] != user["id"]:
         await notify(other, "date_rescheduled", "New time declined", f"{user['name']} kept the original date time.", {"booking_id": bid}, email=True, link=DATES_LINK, cta="View Date")
     return {"ok": True, "status": "declined"}
+
+async def _regular_suggest(item_id, owner_id, other_id, local_day, local_time, start_iso, dur, n=3):
+    """Nearest free start times on the owner's calendar (same length), checked for both people."""
+    owner = await db.users.find_one({"id": owner_id}, {"_id": 0, "id": 1, "locked_slots": 1, "unlocked_slots": 1, **AVAIL_FIELDS})
+    cur = _pdt(start_iso)
+    if cur and cur.tzinfo is None: cur = cur.replace(tzinfo=timezone.utc)
+    try: offset = datetime.fromisoformat(f"{local_day[:10]}T{local_time}:00").replace(tzinfo=timezone.utc) - cur
+    except Exception: offset = timedelta(0)
+    taken = await _taken_blocks(owner, item_id)
+    today = (_now() + offset).date()
+    out = []
+    for i in range(45):
+        day = (today + timedelta(days=i)).isoformat()
+        wins = day_windows(owner, day)
+        if wins is None: wins = [{"from": "10:00", "to": "22:00"}]
+        last = None
+        for m in free_starts(wins, taken.get(day, [])) if wins else []:
+            if last is not None and m < last + dur + DATE_BUFFER: continue
+            tm = _min_to_hm(m % 1440)
+            if day == local_day[:10] and tm == local_time: continue
+            st = datetime.fromisoformat(f"{day}T00:00:00").replace(tzinfo=timezone.utc) + timedelta(minutes=m) - offset
+            if st < _now() + timedelta(hours=1): continue
+            try:
+                await _resched_check(item_id, owner_id, other_id, day, tm, st, dur)
+            except HTTPException:
+                continue
+            out.append({"date": day, "start": tm, "end": _min_to_hm((m + dur) % 1440), "scheduled_start": _iso(st)})
+            last = m
+            if len(out) >= n: return out
+    return out
+
+@api.get("/invites/{did}/suggest")
+async def invite_suggest(did: str, user=Depends(get_current_user)):
+    d = await _get_party(did, user["id"])
+    st = _invite_start(d)
+    return {"suggestions": await _regular_suggest(did, d["recipient_id"], d["inviter_id"], d.get("local_day") or _iso(st)[:10],
+                                                   d.get("local_time") or st.strftime("%H:%M"), _iso(st), DATE_SLOT_MINUTES)}
+
+@api.get("/dates/suggest/{bid}")
+async def booking_suggest(bid: str, user=Depends(get_current_user)):
+    b = await _booking_party(bid, user["id"])
+    st = _pdt(b["scheduled_at"])
+    return {"suggestions": await _regular_suggest(bid, b["to_id"], b["from_id"], b.get("local_day") or b["scheduled_at"][:10],
+                                                   b.get("local_time") or st.strftime("%H:%M"), b["scheduled_at"], _booking_dur(b))}
 
 async def _mirror_to_main_chat(from_id, to_id, text, did):
     """Copy a date-chat message into the regular conversation between the two people."""

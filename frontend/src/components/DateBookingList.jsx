@@ -7,7 +7,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { toast } from "sonner";
 import { CalendarHeart, Camera, Clock, Check, X, Car, Info, Coins, Flag, CalendarClock } from "lucide-react";
-import RescheduleDialog from "./RescheduleDialog";
+import RescheduleDialog, { rescheduleErr } from "./RescheduleDialog";
 import RescheduleProposalBar from "./RescheduleProposalBar";
 import DateReportForm, { DateStartedNote, ReportReplyBlock, ReportStatusNote } from "./DateReportForm";
 import { MapsLink } from "./AddressPicker";
@@ -66,6 +66,7 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
   const shown = all.filter(x => tab ? tabOf(bookingStatus(x.b), x.inc) === tab : matchesFilter(x.b.status, filter));
 
   const [cancelFor, setCancelFor] = useState(null);
+  const declineB = declineFor ? all.find(x => x.b.id === declineFor)?.b : null;
   const cancel = (b, isRecipient) => { const taxi = b.taxi?.status === "sent" ? (b.taxi?.coins || 0) : 0; setCancelFor({ b, isRecipient, taxi, total: b.coins + taxi }); };
   const doCancel = async (b) => {
     setBusyId(b.id);
@@ -321,7 +322,14 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
       <CancelPreviewDialog open={!!cancelFor} onOpenChange={(o) => !o && setCancelFor(null)} total={cancelFor?.total || 0} taxi={cancelFor?.taxi || 0}
         byRequester={!cancelFor?.isRecipient} onConfirm={() => { const b = cancelFor.b; setCancelFor(null); doCancel(b); }} />
       {reschedFor && <RescheduleDialog open={!!reschedFor} onOpenChange={(o) => !o && setReschedFor(null)} ownerId={reschedFor.to_id} itemId={reschedFor.id} url={`/dates/reschedule/${reschedFor.id}`} onDone={load} />}
-      <DeclineReasonDialog open={!!declineFor} onClose={() => setDeclineFor(null)} onConfirm={(r) => respond(declineFor, false, null, r)} testid="booking-decline-dialog" />
+      <DeclineReasonDialog open={!!declineFor} onClose={() => setDeclineFor(null)} onConfirm={(r) => respond(declineFor, false, null, r)} testid="booking-decline-dialog"
+        onPropose={declineB && !declineB.vip ? () => setReschedFor(declineB) : undefined}
+        proposeHint={declineB ? t("dl_propose_hint_n", lang).replace("{n}", declineB.coins) : null}
+        suggestUrl={declineB && !declineB.vip ? `/dates/suggest/${declineFor}` : null}
+        onPickSuggestion={async (s) => {
+          try { await api.post(`/dates/reschedule/${declineFor}`, { scheduled_start: s.scheduled_start, local_day: s.date, local_time: s.start }); toast.success(t("dl_quick_sent", lang)); await load(); }
+          catch (e) { toast.error(rescheduleErr(e.response?.data?.detail, lang)); throw e; }
+        }} />
       <input ref={inputRef} data-testid="photo-verification-upload-input" type="file" accept="image/*" onChange={handleFile} className="hidden"/>
       {all.length === 0 && mode === "vip" && !tab && <EmptyLine text={t("none", lang)} />}
       {shown.length > 0 && (

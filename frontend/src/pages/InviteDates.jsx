@@ -22,7 +22,7 @@ import VerifiedAddressForm, { addressReady, addrErrKey, addrPayload, UnverifiedN
 import DatesToday from "../components/DatesToday";
 import DatesEarnings from "../components/DatesEarnings";
 import CancelPreviewDialog from "../components/CancelPreviewDialog";
-import RescheduleDialog from "../components/RescheduleDialog";
+import RescheduleDialog, { rescheduleErr } from "../components/RescheduleDialog";
 import RescheduleProposalBar from "../components/RescheduleProposalBar";
 
 const RESCHED_STATUSES = ["INVITATION_SENT", "DATE_ACTIVITY_SELECTED", "LOCATION_PROPOSED", "TAXI_REQUESTED", "PICKUP_ADDRESS_PENDING", "PICKUP_ADDRESS_SELECTED", "DATE_CONFIRMED"];
@@ -230,6 +230,11 @@ function DateCard({ d, reload }) {
               <Button data-testid={`date-choose-confirm-${d.id}`} disabled={busy || !choose} onClick={() => act(() => post("/choose", { idea_id: choose }))} className="rose-btn text-white border-0 h-9"><Check size={14} className="me-1" />{tr("id_confirm_choice")}</Button>
               <Button data-testid={`date-reject-${d.id}`} disabled={busy} onClick={() => setDeclineOpen(true)} variant="outline" className="h-9 bg-rose-500/10 border-rose-500/40 text-rose-300 hover:bg-rose-500/20"><X size={14} className="me-1" />{tr("id_reject")}</Button>
               <DeclineReasonDialog open={declineOpen} onClose={() => setDeclineOpen(false)} warning={tr("id_reject_confirm_lock").replace("{when}", whenTxt)}
+                onPropose={() => setReschedOpen(true)} proposeHint={tr("dl_propose_hint_n", { n: d.total_hold || d.coins })} suggestUrl={declineOpen ? `/invites/${d.id}/suggest` : null}
+                onPickSuggestion={async (s) => {
+                  try { await post("/reschedule", { scheduled_start: s.scheduled_start, local_day: s.date, local_time: s.start }); toast.success(tr("dl_quick_sent")); await reload(); }
+                  catch (e) { toast.error(rescheduleErr(e.response?.data?.detail, lang)); throw e; }
+                }}
                 onConfirm={(r) => act(() => post(`/cancel?reason=${encodeURIComponent(r)}`))} testid={`date-decline-dialog-${d.id}`} />
             </div>
             <div className="flex items-start gap-1.5 text-[11px] text-amber-200/90 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2" data-testid={`date-reject-warning-${d.id}`}>
