@@ -6,7 +6,9 @@ import { t } from "../lib/i18n";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { toast } from "sonner";
-import { CalendarHeart, Camera, Clock, Check, X, Car, Info, Coins, Flag } from "lucide-react";
+import { CalendarHeart, Camera, Clock, Check, X, Car, Info, Coins, Flag, CalendarClock } from "lucide-react";
+import RescheduleDialog from "./RescheduleDialog";
+import RescheduleProposalBar from "./RescheduleProposalBar";
 import DateReportForm, { DateStartedNote, ReportReplyBlock, ReportStatusNote } from "./DateReportForm";
 import { MapsLink } from "./AddressPicker";
 import VerifiedAddressForm, { addrHintKey, addressReady, addrPayload, addrErrKey, UnverifiedNote } from "./VerifiedAddressForm";
@@ -44,6 +46,7 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
   const [meetFor, setMeetFor] = useState(null);
   const [reportFor, setReportFor] = useState(null);
   const [declineFor, setDeclineFor] = useState(null);
+  const [reschedFor, setReschedFor] = useState(null);
   const [meetLoc, setMeetLoc] = useState({});
   const [chosenActivity, setChosenActivity] = useState({}); // { bookingId: activityText }
   const inputRef = useRef();
@@ -289,6 +292,9 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
             </div>
           );
         })()}
+        {!b.vip && !started && !underReview && !b.reschedule_proposal && ["escrow", "accepted", "confirmed"].includes(b.status) && (
+          <Button data-testid={`date-reschedule-btn-${b.id}`} disabled={busyId===b.id} onClick={() => setReschedFor(b)} variant="outline" className="bg-amber-500/10 border-amber-500/40 text-amber-300 hover:bg-amber-500/20"><CalendarClock size={14} className="me-1"/> {t("rs_btn", lang)}</Button>
+        )}
         {underReview && <span className="text-[11px] px-2 py-1 rounded-full border border-rose-500/40 bg-rose-500/10 text-rose-200 self-center" data-testid={`date-reported-${b.id}`}>{t("rp_under_review", lang)}</span>}
         {canReport && <Button data-testid={`date-report-${b.id}`} onClick={() => setReportFor(v => v === b.id ? null : b.id)} variant="outline" className="bg-rose-500/10 border-rose-500/40 text-rose-300"><Flag size={14} className="me-1" />{t("id_report_this", lang)}</Button>}
         {isIncoming && !started && (b.status === "accepted" || (b.status === "confirmed" && b.auto_confirmed)) && (
@@ -299,6 +305,8 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
         )}
       </div>
     </div>
+      {b.reschedule_proposal && ["escrow", "accepted", "confirmed"].includes(b.status) && <RescheduleProposalBar id={b.id} p={b.reschedule_proposal} mine={b.reschedule_proposal.by === user?.id}
+        otherName={isIncoming ? b.from_name : b.to_name} url={`/dates/reschedule/${b.id}`} onDone={load} />}
       {started && !underReview && b.status !== "released" && <DateStartedNote id={b.id} />}
       {reportFor === b.id && <DateReportForm id={b.id} onSubmit={(p) => submitReport(b.id, p)} role={isIncoming ? "recipient" : "inviter"} />}
       {b.report && b.report.reporter_id === user?.id && <ReportStatusNote id={b.id} info={{ by_me: true, status: b.report.status || "open", replied: !!b.report.reply, reply_deadline: b.report.reply_deadline, reporter_role: b.report.reporter_role || "inviter" }} />}
@@ -311,6 +319,7 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
     <>
       <CancelPreviewDialog open={!!cancelFor} onOpenChange={(o) => !o && setCancelFor(null)} total={cancelFor?.total || 0} taxi={cancelFor?.taxi || 0}
         byRequester={!cancelFor?.isRecipient} onConfirm={() => { const b = cancelFor.b; setCancelFor(null); doCancel(b); }} />
+      {reschedFor && <RescheduleDialog open={!!reschedFor} onOpenChange={(o) => !o && setReschedFor(null)} ownerId={reschedFor.to_id} itemId={reschedFor.id} url={`/dates/reschedule/${reschedFor.id}`} onDone={load} />}
       <DeclineReasonDialog open={!!declineFor} onClose={() => setDeclineFor(null)} onConfirm={(r) => respond(declineFor, false, null, r)} testid="booking-decline-dialog" />
       <input ref={inputRef} data-testid="photo-verification-upload-input" type="file" accept="image/*" onChange={handleFile} className="hidden"/>
       {all.length === 0 && mode === "vip" && <EmptyLine text={t("none", lang)} />}

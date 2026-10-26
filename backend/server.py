@@ -2763,35 +2763,41 @@ def _block(day, start_min, reason, end_min=None):
     return day, {"from": _min_to_hm(start_min), "to": _min_to_hm(end_min), "reason": reason,
                  "lock_from": _min_to_hm(max(0, start_min - DATE_BUFFER)), "lock_to": _min_to_hm(end_min + DATE_BUFFER)}
 
-async def _taken_blocks(u):
-    """Every locked block per local day for a user: other dates (booked) and cancelled dates/slots (cancelled)."""
+async def _taken_blocks(u, exclude=None):
+    """Every locked block per local day for a user: other dates (booked), pending reschedule proposals (booked) and cancelled dates/slots (cancelled)."""
     uid, out = u["id"], {}
     unlocked = set(u.get("unlocked_slots") or [])
     def add(day, start, reason, end=None):
         d, b = _block(day, start, reason, end)
         if reason == "cancelled" and f"{d}|{b['from']}" in unlocked: return
         out.setdefault(d, []).append(b)
-    async for b in db.date_bookings.find({"status": {"$in": ["escrow", "accepted", "confirmed", "cancelled"]}, "$or": [{"to_id": uid}, {"from_id": uid}]},
-                                         {"_id": 0, "status": 1, "scheduled_at": 1, "slot_from": 1, "slot_to": 1, "local_time": 1, "local_day": 1}):
+    def add_prop(p, dur):
+        if p and p.get("local_day") and p.get("local_time"):
+            st = _hm_to_min(p["local_time"]); add(p["local_day"][:10], st, "booked", st + dur)
+    async for b in db.date_bookings.find({"status": {"$in": ["escrow", "accepted", "confirmed", "cancelled"]}, "id": {"$ne": exclude}, "$or": [{"to_id": uid}, {"from_id": uid}]},
+                                         {"_id": 0, "status": 1, "scheduled_at": 1, "slot_from": 1, "slot_to": 1, "local_time": 1, "local_day": 1, "reschedule_proposal": 1}):
         add((b.get("local_day") or b["scheduled_at"])[:10], _booking_start_min(b), "cancelled" if b["status"] == "cancelled" else "booked", _booking_end_min(b))
-    async for d in db.dates.find({"status": {"$in": INVITE_ACTIVE + INVITE_CANCELLED}, "$or": [{"inviter_id": uid}, {"recipient_id": uid}]},
-                                 {"_id": 0, "status": 1, "location": 1, "proposed_start": 1, "local_day": 1, "local_time": 1}):
+        if b["status"] != "cancelled": add_prop(b.get("reschedule_proposal"), _booking_end_min(b) - _booking_start_min(b))
+    async for d in db.dates.find({"status": {"$in": INVITE_ACTIVE + INVITE_CANCELLED}, "id": {"$ne": exclude}, "$or": [{"inviter_id": uid}, {"recipient_id": uid}]},
+                                 {"_id": 0, "status": 1, "location": 1, "proposed_start": 1, "local_day": 1, "local_time": 1, "reschedule_proposal": 1}):
         st = _pdt((d.get("location") or {}).get("scheduled_start") or d.get("proposed_start"))
         if not st: continue
         day = d.get("local_day") or st.strftime("%Y-%m-%d")
         add(day, _hm_to_min(d.get("local_time") or st.strftime("%H:%M")), "cancelled" if d["status"] in INVITE_CANCELLED else "booked")
+        if d["status"] in INVITE_ACTIVE: add_prop(d.get("reschedule_proposal"), DATE_SLOT_MINUTES)
     for ls in (u.get("locked_slots") or []):
         st = _pdt(ls.get("start"))
         if st: add(ls.get("date") or st.strftime("%Y-%m-%d"), st.hour * 60 + st.minute, "cancelled")
     # de-duplicate identical blocks (e.g. a rejected invite also stored in locked_slots)
     return {k: [dict(t) for t in {tuple(sorted(x.items())) for x in v}] for k, v in out.items()}
 
-async def _assert_slot_free(u, day, start_min, start_dt):
+async def _assert_slot_free(u, day, start_min, start_dt, exclude=None, dur=DATE_SLOT_MINUTES, busy_only=False):
     """Reject past start times and any overlap with another date or a cancelled (locked) slot, incl. 15-min buffer."""
     if start_dt and start_dt.tzinfo is None: start_dt = start_dt.replace(tzinfo=timezone.utc)
     if start_dt and start_dt <= _now(): raise HTTPException(400, "TIME_PASSED")
-    end_min = start_min + DATE_SLOT_MINUTES
-    for b in (await _taken_blocks(u)).get(day, []):
+    end_min = start_min + dur
+    for b in (await _taken_blocks(u, exclude)).get(day, []):
+        if busy_only and b["reason"] == "cancelled": continue
         lf, lt = _hm_to_min(b["lock_from"]), _hm_to_min(b["lock_to"])
         if lt <= lf: lt += 24 * 60
         if start_min < lt and lf < end_min:
@@ -2893,13 +2899,13 @@ async def admin_live_locations(admin=Depends(get_admin)):
     return sorted(out, key=lambda o: o["at"], reverse=True)
 
 @api.get("/profiles/{pid}/availability")
-async def profile_availability(pid: str, user=Depends(get_current_user)):
-    p = await db.users.find_one({"id": pid}, {"_id": 0, "locked_slots": 1, "unlocked_slots": 1, **AVAIL_FIELDS})
+async def profile_availability(pid: str, exclude: Optional[str] = None, user=Depends(get_current_user)):
+    p = await db.users.find_one({"id": pid}, {"_id": 0, "id": 1, "locked_slots": 1, "unlocked_slots": 1, **AVAIL_FIELDS})
     if not p: raise HTTPException(404, "Not found")
     time_window = p.get("availability_time")
     day_slots = p.get("availability_slots") or {}
     p["id"] = pid
-    busy_slots = await _taken_blocks(p)
+    busy_slots = await _taken_blocks(p, exclude)
     locked_days = {d: c for d, v in busy_slots.items() if (c := [x for x in v if x["reason"] == "cancelled"])}
     # per-day open ranges for the next 120 days (specific days, weekly schedule or default window)
     today = datetime.now(timezone.utc).date() - timedelta(days=1)
@@ -3792,6 +3798,17 @@ async def vip_book(req: DateBookingReq, user=Depends(get_current_user)):
 VIP_SCHED_BUFFER = 15  # minutes locked before AND after each booking
 VIP_SCHED_ACTIVE = ["pending", "confirmed"]  # statuses that hold/lock a slot
 
+async def _vs_busy(vip_id, date=None, exclude=None):
+    """Active VIP bookings plus their pending reschedule proposals (a proposed time is held until answered)."""
+    q = {"vip_id": vip_id, "status": {"$in": VIP_SCHED_ACTIVE}, "id": {"$ne": exclude}}
+    docs = await db.vip_sched.find(q, {"_id": 0, "date": 1, "start": 1, "end": 1, "status": 1, "reschedule_proposal": 1}).to_list(1000)
+    out = []
+    for b in docs:
+        out.append({"date": b["date"], "start": b["start"], "end": b["end"], "status": b["status"]})
+        p = b.get("reschedule_proposal")
+        if p: out.append({"date": p["date"], "start": p["start"], "end": p["end"], "status": "pending"})
+    return [b for b in out if date is None or b["date"] == date]
+
 class VipAvailReq(BaseModel):
     date: str            # YYYY-MM-DD
     start: str           # HH:MM
@@ -4053,8 +4070,7 @@ async def vs_public_slots(vip_id: str, user=Depends(get_current_user)):
     await _vs_autocomplete(vip_id)
     today = _vs_today()
     blocks = await db.vip_avail.find({"vip_id": vip_id, "date": {"$gte": today}}, {"_id": 0}).sort([("date", 1), ("start", 1)]).to_list(500)
-    active = await db.vip_sched.find({"vip_id": vip_id, "status": {"$in": VIP_SCHED_ACTIVE}},
-                                     {"_id": 0, "date": 1, "start": 1, "end": 1, "status": 1}).to_list(1000)
+    active = await _vs_busy(vip_id)
     by_date = {}
     tz = blocks[0]["tz"] if blocks else (target.get("timezone") or "UTC")
     for blk in blocks:
@@ -4103,8 +4119,7 @@ async def vs_book(vip_id: str, req: VipSchedBookReq, user=Depends(get_current_us
     if ref_start is None:
         raise HTTPException(400, "TIME_UNAVAILABLE")
     # 2) re-validate against active bookings immediately before creating (double-booking guard)
-    active = await db.vip_sched.find({"vip_id": vip_id, "date": req.date, "status": {"$in": VIP_SCHED_ACTIVE}},
-                                     {"_id": 0, "start": 1, "end": 1}).to_list(500)
+    active = await _vs_busy(vip_id, req.date)
     if _vs_conflict(cs, ce, active, ref_start=ref_start):
         raise HTTPException(409, "SLOT_TAKEN")
     await _vs_extra_checks(vip_id, req.date, cs, ce)
@@ -4650,8 +4665,7 @@ async def vs_extend(bid: str, req: VipExtendReq, user=Depends(get_current_user))
     S = _hm_to_min(b["start"]); E = _hm_to_min(b["end"])
     if E <= S: E += 1440
     ne = E + 60 * req.hours
-    others = await db.vip_sched.find({"vip_id": b["vip_id"], "date": b["date"], "status": {"$in": VIP_SCHED_ACTIVE}, "id": {"$ne": bid}},
-                                     {"_id": 0, "start": 1, "end": 1}).to_list(500)
+    others = await _vs_busy(b["vip_id"], b["date"], exclude=bid)
     if _vs_conflict(E, ne, others, ref_start=S):
         raise HTTPException(409, "SLOT_TAKEN")
     for lk in await _vs_normal_locks(b["vip_id"], b["date"]):
@@ -4708,8 +4722,7 @@ async def _vs_check_new_time(b: dict, date: str, start: str, end: str):
             break
     if ref_start is None:
         raise HTTPException(400, "TIME_UNAVAILABLE")
-    active = await db.vip_sched.find({"vip_id": vip_id, "date": date, "status": {"$in": VIP_SCHED_ACTIVE}, "id": {"$ne": b["id"]}},
-                                     {"_id": 0, "start": 1, "end": 1}).to_list(500)
+    active = await _vs_busy(vip_id, date, exclude=b["id"])
     if _vs_conflict(cs, ce, active, ref_start=ref_start):
         raise HTTPException(409, "SLOT_TAKEN")
     await _vs_extra_checks(vip_id, date, cs, ce)
@@ -4743,6 +4756,14 @@ async def vs_reschedule(bid: str, req: VipRescheduleReq, user=Depends(get_curren
         return {"status": b["status"], "proposal": prop}
     if b["requester_id"] != user["id"]:
         raise HTTPException(403, "Only the requester or the VIP can reschedule")
+    if b["status"] == "confirmed":
+        await _vs_check_new_time(b, req.date, req.start, req.end)
+        prop = {"date": req.date, "start": req.start, "end": req.end, "by": "client", "at": _iso()}
+        await db.vip_sched.update_one({"id": bid}, {"$set": {"reschedule_proposal": prop}})
+        await notify(b["vip_id"], "vs_rescheduled", "New time proposed 🔁",
+                     f"{user['name']} asks to move your date to {req.date} · {req.start}–{req.end}. Accept or decline in VIP Bookings.",
+                     {"booking_id": bid}, email=True, **link)
+        return {"status": "confirmed", "proposal": prop}
     if b["status"] != "pending":
         raise HTTPException(400, "NOT_PENDING")
     cs, ce = await _vs_check_new_time(b, req.date, req.start, req.end)
@@ -4757,22 +4778,28 @@ async def vs_reschedule_answer(bid: str, answer: str, user=Depends(get_current_u
     b = await db.vip_sched.find_one({"id": bid}, {"_id": 0})
     if not b:
         raise HTTPException(404, "Not found")
-    if b["requester_id"] != user["id"]:
-        raise HTTPException(403, "Only the inviter can answer")
     p = b.get("reschedule_proposal")
     if not p or b["status"] not in ("pending", "confirmed"):
         raise HTTPException(400, "NO_PROPOSAL")
+    proposer = b["vip_id"] if p.get("by", "vip") == "vip" else b["requester_id"]
+    answerer = b["requester_id"] if proposer == b["vip_id"] else b["vip_id"]
+    if user["id"] not in (proposer, answerer):
+        raise HTTPException(403, "Forbidden")
+    link = dict(link=f"{PUBLIC_APP_URL}/vip-bookings", cta="Open VIP Bookings")
     if answer == "accept":
+        if user["id"] != answerer:
+            raise HTTPException(403, "The other person must accept")
         cs, ce = await _vs_check_new_time(b, p["date"], p["start"], p["end"])
         await _vs_apply_time(b, p["date"], p["start"], p["end"], cs, ce)
-        await notify(b["vip_id"], "vs_rescheduled", "New time accepted ✅", f"{user['name']} accepted the new time: {p['date']} · {p['start']}–{p['end']}.",
-                     {"booking_id": bid}, email=True, link=f"{PUBLIC_APP_URL}/vip-bookings", cta="Open VIP Bookings")
+        await notify(proposer, "vs_rescheduled", "New time accepted ✅", f"{user['name']} accepted the new time: {p['date']} · {p['start']}–{p['end']}.",
+                     {"booking_id": bid}, email=True, **link)
         return {"ok": True, "date": p["date"], "start": p["start"], "end": p["end"]}
     if answer != "decline":
         raise HTTPException(400, "Unknown answer")
     await db.vip_sched.update_one({"id": bid}, {"$unset": {"reschedule_proposal": ""}})
-    await notify(b["vip_id"], "vs_rescheduled", "New time declined", f"{user['name']} kept the original time: {b['date']} · {b['start']}–{b['end']}.",
-                 {"booking_id": bid}, email=True, link=f"{PUBLIC_APP_URL}/vip-bookings", cta="Open VIP Bookings")
+    if user["id"] == answerer:
+        await notify(proposer, "vs_rescheduled", "New time declined", f"{user['name']} kept the original time: {b['date']} · {b['start']}–{b['end']}.",
+                     {"booking_id": bid}, email=True, **link)
     return {"ok": True}
 
 # ---- Background loop: 30-min reminders + auto-complete ----
@@ -5348,6 +5375,7 @@ def _serialize(d, viewer_id, other_mini):
             "report_info": _report_view(d.get("report"), viewer_id),
             "verification": (d.get("verification") or {}).get("status"), "windows": windows,
             "decline_reason": d.get("decline_reason"), "declined_by_me": d.get("declined_by") == viewer_id,
+            "reschedule_proposal": ({**d["reschedule_proposal"], "mine": d["reschedule_proposal"].get("by") == viewer_id} if d.get("reschedule_proposal") else None),
             "server_now": _iso(), "created_at": d.get("created_at")}
 
 class InviteCreateReq(BaseModel):
@@ -5852,6 +5880,123 @@ async def invite_slots(did: str, day: str, user=Depends(get_current_user)):
         conflict = any(bs < en and st < be for bs, be in busy)
         slots.append({"time": f"{h:02d}:00", "start": _iso(st), "available": not conflict})
     return {"day": day, "busy": [{"start": _iso(s), "end": _iso(e)} for s, e in busy], "slots": slots, "duration_hours": DATE_WINDOW_HOURS}
+
+# ---- Reschedule regular invite dates and booked dates (both sides propose, the other accepts) ----
+class RescheduleReq(BaseModel):
+    scheduled_start: str
+    local_day: str
+    local_time: str
+
+RESCHEDULABLE_INVITE = ["INVITATION_SENT", "DATE_ACTIVITY_SELECTED", "LOCATION_PROPOSED", "TAXI_REQUESTED",
+                        "PICKUP_ADDRESS_PENDING", "PICKUP_ADDRESS_SELECTED", "DATE_CONFIRMED"]
+RESCHEDULABLE_BOOKING = ["escrow", "accepted", "confirmed"]
+
+def _fmt_when(day, tm): return f"{day} · {tm}"
+
+async def _resched_check(item_id, owner_id, other_id, day, tm, start_dt, dur):
+    """New time must sit in the owner's availability and be free for both people (this date's own slot ignored)."""
+    if not start_dt: raise HTTPException(400, "Invalid start time")
+    owner = await db.users.find_one({"id": owner_id}, {"_id": 0, "id": 1, "locked_slots": 1, "unlocked_slots": 1, **AVAIL_FIELDS})
+    other = await db.users.find_one({"id": other_id}, {"_id": 0, "id": 1})
+    sm = _hm_to_min(tm)
+    wins = day_windows(owner, day)
+    if wins is not None and not wins: raise HTTPException(400, "DAY_UNAVAILABLE")
+    if wins and fit_start(wins, sm) is None: raise HTTPException(400, f"TIME_UNAVAILABLE:{wins_label(wins)}")
+    await _assert_slot_free(owner, day, sm, start_dt, exclude=item_id, dur=dur)
+    await _assert_slot_free(other, day, sm, start_dt, exclude=item_id, dur=dur, busy_only=True)
+
+def _resched_started(start):
+    if start and start.tzinfo is None: start = start.replace(tzinfo=timezone.utc)
+    return bool(start) and start <= _now()
+
+def _proposal(req, uid):
+    return {"by": uid, "scheduled_start": req.scheduled_start, "local_day": req.local_day[:10], "local_time": req.local_time, "at": _iso()}
+
+def _invite_start(d): return _pdt((d.get("location") or {}).get("scheduled_start") or d.get("proposed_start"))
+
+@api.post("/invites/{did}/reschedule")
+async def invite_reschedule(did: str, req: RescheduleReq, user=Depends(get_current_user)):
+    d = await _get_party(did, user["id"])
+    if d["status"] not in RESCHEDULABLE_INVITE or d.get("report"): raise HTTPException(400, "CANNOT_RESCHEDULE")
+    if _resched_started(_invite_start(d)): raise HTTPException(400, "DATE_STARTED")
+    await _resched_check(did, d["recipient_id"], d["inviter_id"], req.local_day[:10], req.local_time, _pdt(req.scheduled_start), DATE_SLOT_MINUTES)
+    prop = _proposal(req, user["id"])
+    await db.dates.update_one({"id": did}, {"$set": {"reschedule_proposal": prop}})
+    other = d["recipient_id"] if d["inviter_id"] == user["id"] else d["inviter_id"]
+    await notify(other, "date_rescheduled", "New date time proposed 🔁",
+                 f"{user['name']} asks to move your date to {_fmt_when(prop['local_day'], prop['local_time'])}. Accept or keep the original time in Dates.",
+                 {"date_id": did}, email=True, link=DATES_LINK, cta="View Date")
+    return {"ok": True, "proposal": prop}
+
+@api.post("/invites/{did}/reschedule/{answer}")
+async def invite_reschedule_answer(did: str, answer: str, user=Depends(get_current_user)):
+    d = await _get_party(did, user["id"])
+    p = d.get("reschedule_proposal")
+    if not p or d["status"] not in RESCHEDULABLE_INVITE: raise HTTPException(400, "NO_PROPOSAL")
+    other = p["by"]
+    if answer == "accept":
+        if p["by"] == user["id"]: raise HTTPException(403, "The other person must accept")
+        start = _pdt(p["scheduled_start"])
+        await _resched_check(did, d["recipient_id"], d["inviter_id"], p["local_day"], p["local_time"], start, DATE_SLOT_MINUTES)
+        end = start + timedelta(hours=DATE_WINDOW_HOURS)
+        upd = {"proposed_start": _iso(start), "proposed_end": _iso(end), "local_day": p["local_day"], "local_time": p["local_time"],
+               "reminders": {}, "rescheduled_at": _iso(), "updated_at": _iso()}
+        if d.get("location"): upd.update({"location.scheduled_start": _iso(start), "location.scheduled_end": _iso(end)})
+        await db.dates.update_one({"id": did}, {"$set": upd, "$unset": {"reschedule_proposal": ""}})
+        await notify(other, "date_rescheduled", "New time accepted ✅", f"{user['name']} accepted the new time: {_fmt_when(p['local_day'], p['local_time'])}.",
+                     {"date_id": did}, email=True, link=DATES_LINK, cta="View Date")
+        return {"ok": True, "status": "accepted"}
+    if answer != "decline": raise HTTPException(400, "Unknown answer")
+    await db.dates.update_one({"id": did}, {"$unset": {"reschedule_proposal": ""}})
+    if p["by"] != user["id"]:
+        await notify(other, "date_rescheduled", "New time declined", f"{user['name']} kept the original date time.", {"date_id": did}, email=True, link=DATES_LINK, cta="View Date")
+    return {"ok": True, "status": "declined"}
+
+async def _booking_party(bid, uid):
+    b = await db.date_bookings.find_one({"id": bid}, {"_id": 0})
+    if not b: raise HTTPException(404, "Not found")
+    if uid not in (b["from_id"], b["to_id"]): raise HTTPException(403, "Forbidden")
+    return b
+
+def _booking_dur(b): return _booking_end_min(b) - _booking_start_min(b)
+
+@api.post("/dates/reschedule/{bid}")
+async def booking_reschedule(bid: str, req: RescheduleReq, user=Depends(get_current_user)):
+    b = await _booking_party(bid, user["id"])
+    if b["status"] not in RESCHEDULABLE_BOOKING or b.get("vip") or _report_open(b): raise HTTPException(400, "CANNOT_RESCHEDULE")
+    if _resched_started(_pdt(b["scheduled_at"])): raise HTTPException(400, "DATE_STARTED")
+    await _resched_check(bid, b["to_id"], b["from_id"], req.local_day[:10], req.local_time, _pdt(req.scheduled_start), _booking_dur(b))
+    prop = _proposal(req, user["id"])
+    await db.date_bookings.update_one({"id": bid}, {"$set": {"reschedule_proposal": prop}})
+    other = b["to_id"] if b["from_id"] == user["id"] else b["from_id"]
+    await notify(other, "date_rescheduled", "New date time proposed 🔁",
+                 f"{user['name']} asks to move your date at {b.get('venue') or ''} to {_fmt_when(prop['local_day'], prop['local_time'])}. Accept or keep the original time in Dates.",
+                 {"booking_id": bid}, email=True, link=DATES_LINK, cta="View Date")
+    return {"ok": True, "proposal": prop}
+
+@api.post("/dates/reschedule/{bid}/{answer}")
+async def booking_reschedule_answer(bid: str, answer: str, user=Depends(get_current_user)):
+    b = await _booking_party(bid, user["id"])
+    p = b.get("reschedule_proposal")
+    if not p or b["status"] not in RESCHEDULABLE_BOOKING: raise HTTPException(400, "NO_PROPOSAL")
+    other = p["by"]
+    if answer == "accept":
+        if p["by"] == user["id"]: raise HTTPException(403, "The other person must accept")
+        start, dur = _pdt(p["scheduled_start"]), _booking_dur(b)
+        await _resched_check(bid, b["to_id"], b["from_id"], p["local_day"], p["local_time"], start, dur)
+        sm = _hm_to_min(p["local_time"])
+        await db.date_bookings.update_one({"id": bid}, {"$set": {
+            "scheduled_at": _iso(start), "local_day": p["local_day"], "local_time": p["local_time"],
+            "slot_from": _min_to_hm(sm), "slot_to": _min_to_hm(sm + dur), "reminders": {}, "rescheduled_at": _iso()},
+            "$unset": {"reschedule_proposal": ""}})
+        await notify(other, "date_rescheduled", "New time accepted ✅", f"{user['name']} accepted the new time: {_fmt_when(p['local_day'], p['local_time'])}.",
+                     {"booking_id": bid}, email=True, link=DATES_LINK, cta="View Date")
+        return {"ok": True, "status": "accepted"}
+    if answer != "decline": raise HTTPException(400, "Unknown answer")
+    await db.date_bookings.update_one({"id": bid}, {"$unset": {"reschedule_proposal": ""}})
+    if p["by"] != user["id"]:
+        await notify(other, "date_rescheduled", "New time declined", f"{user['name']} kept the original date time.", {"booking_id": bid}, email=True, link=DATES_LINK, cta="View Date")
+    return {"ok": True, "status": "declined"}
 
 async def _mirror_to_main_chat(from_id, to_id, text, did):
     """Copy a date-chat message into the regular conversation between the two people."""

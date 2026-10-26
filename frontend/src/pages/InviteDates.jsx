@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { CalendarHeart, MapPin, Clock, Coins, ShieldAlert, Flag, Camera, Car, Check, X, MessageCircle, Send, CalendarPlus, Lock } from "lucide-react";
+import { CalendarHeart, MapPin, Clock, Coins, ShieldAlert, Flag, Camera, Car, Check, X, MessageCircle, Send, CalendarPlus, Lock, CalendarClock } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { api, fileUrl } from "../lib/api";
@@ -22,6 +22,10 @@ import VerifiedAddressForm, { addressReady, addrErrKey, addrPayload, UnverifiedN
 import DatesToday from "../components/DatesToday";
 import DatesEarnings from "../components/DatesEarnings";
 import CancelPreviewDialog from "../components/CancelPreviewDialog";
+import RescheduleDialog from "../components/RescheduleDialog";
+import RescheduleProposalBar from "../components/RescheduleProposalBar";
+
+const RESCHED_STATUSES = ["INVITATION_SENT", "DATE_ACTIVITY_SELECTED", "LOCATION_PROPOSED", "TAXI_REQUESTED", "PICKUP_ADDRESS_PENDING", "PICKUP_ADDRESS_SELECTED", "DATE_CONFIRMED"];
 
 const FALLBACK = "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&q=80";
 const TERMINAL = ["COMPLETED", "COMPLETED_AUTO", "CANCELLED", "CANCELLED_TRANSPORTATION", "REFUNDED"];
@@ -178,6 +182,9 @@ function DateCard({ d, reload }) {
   };
 
   const started = !!d.location?.scheduled_start && nowMs >= new Date(d.location.scheduled_start).getTime();
+  const [reschedOpen, setReschedOpen] = useState(false);
+  const curStart = d.location?.scheduled_start || d.proposed_start;
+  const canResched = RESCHED_STATUSES.includes(d.status) && !d.report && !d.reschedule_proposal && !!curStart && nowMs < new Date(curStart).getTime();
   const submitReport = async (payload) => { await post("/report", payload); setShowReport(false); await reload(); };
   const submitVerify = () => act(async () => {
     if (!vfile || !vok) { throw { response: { data: { detail: tr("id_verify_required") } } }; }
@@ -315,6 +322,9 @@ function DateCard({ d, reload }) {
         {!TERMINAL.includes(d.status) && d.status !== "PHOTO_VERIFICATION_PENDING" && !(d.status === "INVITATION_SENT" && !isInv) && !started && (
           <Button data-testid={`date-cancel-${d.id}`} disabled={busy} onClick={cancelDate} variant="outline" className="h-9 bg-rose-500/10 border-rose-500/40 text-rose-300 hover:bg-rose-500/20"><X size={14} className="me-1" />{tr("id_cancel_date")}</Button>
         )}
+        {canResched && <Button data-testid={`date-reschedule-${d.id}`} disabled={busy} onClick={() => setReschedOpen(true)} variant="outline" className="h-9 bg-amber-500/10 border-amber-500/40 text-amber-300 hover:bg-amber-500/20"><CalendarClock size={14} className="me-1" />{tr("rs_btn")}</Button>}
+        {reschedOpen && <RescheduleDialog open={reschedOpen} onOpenChange={setReschedOpen} ownerId={isInv ? d.other?.id : user?.id} itemId={d.id} url={`/invites/${d.id}/reschedule`} onDone={reload} />}
+        {d.reschedule_proposal && RESCHED_STATUSES.includes(d.status) && <RescheduleProposalBar id={d.id} p={d.reschedule_proposal} mine={d.reschedule_proposal.mine} otherName={d.other?.name} url={`/invites/${d.id}/reschedule`} onDone={reload} />}
         {cancelOpen && (() => { const c = cancelInfo(); return (
           <CancelPreviewDialog open={cancelOpen} onOpenChange={setCancelOpen} total={c.total} taxi={c.taxi} split={c.split} byRequester={isInv}
             onConfirm={() => { setCancelOpen(false); act(() => post("/cancel")); }} />

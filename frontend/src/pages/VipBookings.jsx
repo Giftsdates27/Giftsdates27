@@ -90,6 +90,8 @@ function RescheduleProposal({ b, who, onDone }) {
   const { lang } = useApp();
   const [busy, setBusy] = useState(false);
   const p = b.reschedule_proposal;
+  const byVip = (p.by || "vip") === "vip";
+  const canAnswer = byVip ? who === "outgoing" : who === "incoming";
   const when = `${new Date(`${p.date}T00:00:00`).toLocaleDateString(lang, { weekday: "short", day: "numeric", month: "short" })} · ${p.start}–${p.end}`;
   const answer = async (a) => {
     setBusy(true);
@@ -100,8 +102,9 @@ function RescheduleProposal({ b, who, onDone }) {
   return (
     <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 flex flex-wrap items-center gap-2 text-xs" data-testid={`vs-resched-proposal-${b.id}`}>
       <CalendarClock size={14} className="text-amber-300" />
-      <span className="text-amber-100">{t(who === "outgoing" ? "rp_vip_asks" : "rp_waiting", lang)} <b className="font-mono-num">{when}</b></span>
-      {who === "outgoing" && (
+      <span className="text-amber-100">{t(canAnswer ? (byVip ? "rp_vip_asks" : "rp_client_asks") : "rs_waiting", lang)} <b className="font-mono-num">{when}</b></span>
+      {!canAnswer && <Button size="sm" variant="outline" disabled={busy} onClick={() => answer("decline")} className="ms-auto bg-white/5 border-white/15 text-slate-300 h-8" data-testid={`vs-resched-withdraw-${b.id}`}>{t("rs_withdraw", lang)}</Button>}
+      {canAnswer && (
         <div className="flex gap-2 ms-auto">
           <Button size="sm" disabled={busy} onClick={() => answer("accept")} className="bg-emerald-600 hover:bg-emerald-500 text-white border-0 h-8" data-testid={`vs-resched-accept-${b.id}`}>{busy ? <Loader2 size={14} className="animate-spin" /> : <><Check size={14} className="me-1" />{t("rp_accept", lang)}</>}</Button>
           <Button size="sm" variant="outline" disabled={busy} onClick={() => answer("decline")} className="bg-white/5 border-white/15 text-slate-300 h-8" data-testid={`vs-resched-decline-${b.id}`}>{t("rp_keep", lang)}</Button>
@@ -172,7 +175,7 @@ function BookingCard({ b, who, onConfirm, onDecline, onCancel, onReschedule, onR
         )}
         {who === "outgoing" && (b.status === "pending" || b.status === "confirmed") && (
           <>
-            {b.status === "pending" && (
+            {(b.status === "pending" || (b.status === "confirmed" && !b.reschedule_proposal && now < start.getTime())) && (
               <Button data-testid={`vs-reschedule-${b.id}`} size="sm" variant="outline" disabled={loading} onClick={() => onReschedule(b)} className="bg-white/5 border-amber-500/40 text-amber-300 hover:bg-amber-500/10 h-9">{t("vb_reschedule", lang)}</Button>
             )}
             <Button data-testid={`vs-cancel-${b.id}`} size="sm" variant="outline" disabled={loading} onClick={() => onCancel(b, who)} className="bg-white/5 border-white/15 text-slate-300 hover:bg-white/10 h-9">{t("vb_cancel", lang)}</Button>
