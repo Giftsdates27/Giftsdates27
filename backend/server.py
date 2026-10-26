@@ -3868,6 +3868,13 @@ def _booking_location(target: dict, place: Optional[str], src) -> dict:
         return {k: op.get(k) for k in LOC_KEYS}
     return {k: getattr(src, k, None) for k in LOC_KEYS}
 
+def _vs_places(target: dict) -> list:
+    """Where a VIP date can happen: the VIP's chosen places, else the client's place / another address (+ VIP's place if saved)."""
+    places = [p for p in ((target.get("vip") or {}).get("places") or []) if p in VIP_PLACES]
+    if not places:
+        places = (["own"] if (target.get("vip_own_place") or {}).get("address") else []) + ["your", "other"]
+    return places
+
 def _hide_own_address(b: dict, visible: bool) -> dict:
     """The VIP's home address is shown to the client only once the date is confirmed."""
     if b.get("place") == "own" and not visible:
@@ -4067,7 +4074,7 @@ async def vs_del_availability(aid: str, user=Depends(get_current_user)):
 @api.get("/vip/schedule/{vip_id}/slots")
 async def vs_public_slots(vip_id: str, exclude: Optional[str] = None, user=Depends(get_current_user)):
     """Public: bookable slots for a VIP, grouped by date, each tagged with a visual state."""
-    target = await db.users.find_one({"id": vip_id}, {"_id": 0, "id": 1, "timezone": 1, "vip.prices": 1, "vip.places": 1})
+    target = await db.users.find_one({"id": vip_id}, {"_id": 0, "id": 1, "timezone": 1, "vip.prices": 1, "vip.places": 1, "vip_own_place.address": 1})
     if not target:
         raise HTTPException(404, "Not found")
     await _vs_autocomplete(vip_id)
@@ -4094,7 +4101,7 @@ async def vs_public_slots(vip_id: str, exclude: Optional[str] = None, user=Depen
         dd["taken"] = taken
     days = sorted(by_date.values(), key=lambda d: d["date"])
     return {"tz": tz, "buffer": VIP_SCHED_BUFFER, "durations": list(VIP_DURATIONS), "extra_hour_price": vip_extra_price(target),
-            "rates": {str(h): c for h, c in vip_rates(target).items()}, "places": (target.get("vip") or {}).get("places") or [], "days": days}
+            "rates": {str(h): c for h, c in vip_rates(target).items()}, "places": _vs_places(target), "days": days}
 
 @api.post("/vip/schedule/{vip_id}/book")
 async def vs_book(vip_id: str, req: VipSchedBookReq, user=Depends(get_current_user)):
@@ -4106,6 +4113,8 @@ async def vs_book(vip_id: str, req: VipSchedBookReq, user=Depends(get_current_us
     ns, ne = _hm_to_min(req.start), _hm_to_min(req.end)
     if ns == ne:
         raise HTTPException(400, "BAD_TIME")
+    if req.place not in _vs_places(target):
+        raise HTTPException(400, "PLACE_REQUIRED")
     if req.place in ("your", "other"):
         await _apply_geo(req)
     # 1) the requested slot must fall inside one of the VIP's availability blocks (which may run past midnight)

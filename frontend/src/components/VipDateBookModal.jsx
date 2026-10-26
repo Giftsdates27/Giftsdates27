@@ -28,7 +28,7 @@ function Step({ n, icon: Icon, title, children, testid }) {
   );
 }
 const fmtDay = (d) => { try { const [y, m, dd] = d.split("-").map(Number); return new Date(y, m - 1, dd).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }); } catch { return d; } };
-const ERR = { SLOT_TAKEN: "bk_slot_taken", TIME_UNAVAILABLE: "bk_time_unavail", TIME_PASSED: "bk_time_passed", DURATION_CHANGED: "bk_same_len", "Insufficient coins": "not_enough_coins" };
+const ERR = { SLOT_TAKEN: "bk_slot_taken", TIME_UNAVAILABLE: "bk_time_unavail", TIME_PASSED: "bk_time_passed", DURATION_CHANGED: "bk_same_len", PLACE_REQUIRED: "vip_select_place_first", "Insufficient coins": "not_enough_coins" };
 
 function PriceSummary({ lang, length, extra, rate, extraPrice, total }) {
   return (
