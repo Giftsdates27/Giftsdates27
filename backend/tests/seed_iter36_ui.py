@@ -40,7 +40,7 @@ for vid in (V, W):
 
 
 def book(h, vid, n, st):
-    r = requests.post(f"{API}/vip/schedule/{vid}/book", headers=h, json={"date": day(n), "start": st, "end": f"{int(st[:2])+1:02d}:00", "length": 1, "tz": "UTC", "place": "own"})
+    r = requests.post(f"{API}/vip/schedule/{vid}/book", headers=h, json={"date": day(n), "start": st, "end": f"{int(st[:2])+1:02d}:00", "length": 1, "tz": "UTC", "place": "other", "address": "1 Rue de Rivoli", "city": "Paris", "postal_code": "75001", "country": "France", "address_confirmed": True})
     assert r.status_code == 200, r.text
     return r.json()["booking_id"]
 

@@ -77,7 +77,7 @@ export default function SupportChat() {
     <>
       {!open && (
         <button data-testid="support-launcher" onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-[60] w-14 h-14 rounded-full rose-btn text-white border-0 shadow-2xl flex items-center justify-center hover:scale-105 transition-transform"
+          className="fixed bottom-5 right-5 z-40 w-14 h-14 rounded-full rose-btn text-white border-0 shadow-2xl flex items-center justify-center hover:scale-105 transition-transform"
           aria-label="Open support chat">
           <MessageCircle size={24} />
         </button>

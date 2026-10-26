@@ -5,6 +5,14 @@ import { useApp } from "../context/AppContext";
 import { t } from "../lib/i18n";
 
 const fmtDay = (d, lang) => { try { const [y, m, dd] = d.split("-").map(Number); return new Date(y, m - 1, dd).toLocaleDateString(lang, { weekday: "short", day: "numeric", month: "short" }); } catch { return d; } };
+const hmMin = (hm) => { const [h, m] = hm.split(":").map(Number); return h * 60 + m; };
+const hhmm = (d) => d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+// Regular-date suggestions carry an exact UTC start: show them in the viewer's own clock (same as the date cards).
+const label = (s, lang) => {
+  if (!s.scheduled_start) return { day: fmtDay(s.date, lang), time: `${s.start}–${s.end}` };
+  const a = new Date(s.scheduled_start), dur = ((hmMin(s.end) - hmMin(s.start)) + 1440) % 1440 || 150;
+  return { day: a.toLocaleDateString(lang, { weekday: "short", day: "numeric", month: "short" }), time: `${hhmm(a)}–${hhmm(new Date(a.getTime() + dur * 60000))}` };
+};
 
 /** Nearest free times (fetched from `url`) as one-tap chips; onPick(s) sends the chosen time. Hidden when none. */
 export default function SuggestedTimes({ url, onPick, title = "dl_quick_times", testid = "suggested-times", tone = "emerald" }) {
@@ -26,8 +34,8 @@ export default function SuggestedTimes({ url, onPick, title = "dl_quick_times", 
         {items.map((s, i) => (
           <button key={`${s.date}-${s.start}`} type="button" disabled={busy !== null} onClick={() => pick(s, i)} data-testid={`${testid}-${i}`}
             className={`rounded-lg border px-2 py-1.5 text-start transition-colors disabled:opacity-50 ${c}`}>
-            <div className="text-[11px] font-medium flex items-center gap-1">{busy === i && <Loader2 size={11} className="animate-spin" />}{fmtDay(s.date, lang)}</div>
-            <div className="text-[11px] font-mono-num text-white">{s.start}–{s.end}</div>
+            <div className="text-[11px] font-medium flex items-center gap-1">{busy === i && <Loader2 size={11} className="animate-spin" />}{label(s, lang).day}</div>
+            <div className="text-[11px] font-mono-num text-white">{label(s, lang).time}</div>
           </button>
         ))}
       </div>

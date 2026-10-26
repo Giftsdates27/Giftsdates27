@@ -221,7 +221,7 @@ class TestBookingReschedule:
 class TestVipReschedule:
     def test_01_setup_and_book(self):
         mdb.vip_avail.insert_one({"id": str(uuid.uuid4()), "vip_id": S["V"], "date": D3, "start": "10:00", "end": "22:00", "tz": "UTC", "slot_len": 60})
-        r = requests.post(f"{API}/vip/schedule/{S['V']}/book", headers=S["Ah"], json={"date": D3, "start": "12:00", "end": "13:00", "length": 1, "tz": "UTC", "place": "own"})
+        r = requests.post(f"{API}/vip/schedule/{S['V']}/book", headers=S["Ah"], json={"date": D3, "start": "12:00", "end": "13:00", "length": 1, "tz": "UTC", "place": "other", "address": "1 Rue de Rivoli", "city": "Paris", "postal_code": "75001", "country": "France", "address_confirmed": True})
         assert r.status_code == 200, r.text
         S["vb"] = r.json()["booking_id"]
         # pending: client reschedule changes instantly
@@ -238,7 +238,7 @@ class TestVipReschedule:
         sl = requests.get(f"{API}/vip/schedule/{S['V']}/slots", headers=S["Ch"]).json()
         day = next(d for d in sl["days"] if d["date"] == D3)
         assert {"13:00", "16:00"} <= {t["from"] for t in day["taken"]}, day["taken"]
-        r = requests.post(f"{API}/vip/schedule/{S['V']}/book", headers=S["Ch"], json={"date": D3, "start": "16:00", "end": "17:00", "length": 1, "tz": "UTC", "place": "own"})
+        r = requests.post(f"{API}/vip/schedule/{S['V']}/book", headers=S["Ch"], json={"date": D3, "start": "16:00", "end": "17:00", "length": 1, "tz": "UTC", "place": "other", "address": "1 Rue de Rivoli", "city": "Paris", "postal_code": "75001", "country": "France", "address_confirmed": True})
         assert r.status_code == 409 and "SLOT_TAKEN" in detail(r), r.text
 
     def test_03_accept_by_vip(self):

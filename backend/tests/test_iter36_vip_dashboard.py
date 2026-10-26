@@ -51,7 +51,7 @@ def setup():
 
 
 def book_vip(h, start, end):
-    r = requests.post(f"{API}/vip/schedule/{S['V']}/book", headers=h, json={"date": D, "start": start, "end": end, "length": 1, "tz": "UTC", "place": "own"})
+    r = requests.post(f"{API}/vip/schedule/{S['V']}/book", headers=h, json={"date": D, "start": start, "end": end, "length": 1, "tz": "UTC", "place": "other", "address": "1 Rue de Rivoli", "city": "Paris", "postal_code": "75001", "country": "France", "address_confirmed": True})
     assert r.status_code == 200, r.text
     return r.json()["booking_id"]
 
