@@ -6,12 +6,19 @@ import { api } from "../lib/api";
 import { useApp } from "../context/AppContext";
 import { t } from "../lib/i18n";
 import { rescheduleErr } from "./RescheduleDialog";
+import { myTz, zonedInstant, cityOf } from "../lib/tz";
+
+const fromKeyLabel = (d, lang) => { const [y, m, dd] = d.split("-").map(Number); return new Date(y, m - 1, dd).toLocaleDateString(lang, { weekday: "short", day: "numeric", month: "short" }); };
 
 /** Shows a pending new-time proposal: the other side accepts/keeps the original, the proposer can withdraw. */
-export default function RescheduleProposalBar({ id, p, mine, url, otherName, onDone }) {
+export default function RescheduleProposalBar({ id, p, mine, url, otherName, onDone, wallTz }) {
   const { lang } = useApp();
   const [busy, setBusy] = useState(false);
-  const when = p.scheduled_start ? new Date(p.scheduled_start).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : `${p.local_day} · ${p.local_time}`;
+  // VIP price-list dates: the time is the VIP's wall clock → show it as-is with the city, plus the viewer's own time if different.
+  const wallStart = wallTz ? zonedInstant(p.local_day, p.local_time, wallTz) : null;
+  const when = wallTz
+    ? `${fromKeyLabel(p.local_day, lang)} · ${p.local_time} (${cityOf(wallTz)})${wallTz !== myTz() ? ` · ${t("tz_your_time", lang)} ${wallStart.toLocaleString(lang, { weekday: "short", hour: "2-digit", minute: "2-digit" })}` : ""}`
+    : p.scheduled_start ? new Date(p.scheduled_start).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : `${p.local_day} · ${p.local_time}`;
   const answer = async (a) => {
     setBusy(true);
     try {

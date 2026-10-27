@@ -1,0 +1,38 @@
+{
+  "summary": "Tested timezone labels and VIP price-list rescheduling on the backend (pytest) and frontend (Playwright with timezone_id America/Toronto and Europe/Paris contexts). Everything requested works. PATCH /auth/me saves the timezone, ignores invalid values and runs on login. The tz fields are exposed (invite other.tz, /dates other_tz, vs requester/vip_card tz). date-tz and vs-tz lines show correctly converted times, including the Nov 1 2026 DST change in Toronto, and nothing shows when both people share a timezone. For VIP price-list bookings: the Propose new time button shows, propose/accept stores the naive wall-clock and keeps the length, suggestions return wall-clock starts with the real length, and the decline dialog shows the propose box and 3 chips; tapping a chip creates a proposal and the booking stays escrow. Regression for regular reschedule and suggestions passes. One real bug: past/near-term checks treat the VIP wall-clock times as UTC.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/dates/reschedule/{bid}, /accept, GET /api/dates/suggest/{bid} (vip=true)", "issue": "The VIP's naive wall-clock time is treated as UTC in _assert_slot_free (TIME_PASSED), in _resched_started (DATE_STARTED) and in _regular_suggest (now+1h filter and 'today'). Reproduced: (a) VIP in Asia/Tokyo: a time 3h in the past in Tokyo is accepted (200). (b) VIP in America/Sao_Paulo: a valid time 2h ahead in Sao Paulo is rejected with TIME_PASSED. (c) VIP in Paris at 11:16 local: the first suggestion chip was 11:30 the same day, only 14 minutes ahead, and the client could accept it. Also, for VIPs east of UTC the reschedule stays open for up to the UTC offset after the real start; for VIPs west of UTC it closes early."},
+      {"endpoint": "vip price-list bookings (date_bookings.vip=true)", "issue": "No timezone is stored on the booking. The display relies on the VIP's current users.timezone (client view) and the browser timezone (VIP view). The frontend auto-PATCHes users.timezone to the browser timezone on every login, so a travelling VIP changes how every existing price-list booking is read."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "VIP Bookings > Booked dates (VIP price-list rows)", "issues": ["Main line 'date-time-range-{id}' shows the VIP's wall-clock (e.g. Start 11:30 AM) with no timezone label. A Toronto client also sees 'Your time 06:30 AM', so it is unclear which clock the main line uses. The vs card shows '· Europe/Paris'; add the same label here.", "Trailing '·' with an empty city after the time range on place='own' rows."]},
+      {"screen": "RescheduleProposalBar / SuggestedTimes for VIP price-list bookings", "issues": ["The proposal time (resched-when-{id}) and the chips show the VIP's wall-clock with no timezone. A Toronto client sees 'Tue, Oct 27, 11:30 AM', which is really 06:30 for them. Add a tz label or the viewer-clock time."]},
+      {"screen": "Dates > invite card (INVITATION_SENT)", "issues": ["The card shows only '{Name}'s time' (date-tz). The viewer's own time is not shown because DateTimeRange is hidden for isInv without location.scheduled_start, so you see the other person's clock but not yours."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter38_tz_vip_resched.py", "/app/backend/tests/test_iter38_vip_tz_edge.py", "/app/backend/tests/seed_iter38_ui.py", "/app/test_reports/pytest/pytest_iter38.xml"],
+  "action_items": [
+    "VIP price-list reschedule/suggest: turn the naive wall-clock into a real instant using the VIP's tz (b.tz or the VIP's users.timezone) before the TIME_PASSED / DATE_STARTED / now+1h checks and the 'today' offset in _regular_suggest. test_iter38_vip_tz_edge.py currently fails on purpose and shows the bug.",
+    "Store the tz on vip price-list bookings at /vip/book (the VIP's timezone) and use b.tz in BookingTz instead of myTz()/other_tz.",
+    "Add a timezone label to the VIP price-list main time line, the proposal bar and the suggestion chips.",
+    "Optional: show the viewer's own time on invite cards before the location is set."
+  ],
+  "critical_code_review_comments": [
+    "server.py is about 6480 lines; it should be split into modules.",
+    "_resched_started and _assert_slot_free default naive datetimes to UTC, which is wrong for VIP wall-clock strings.",
+    "BookingTz (DateBookingList.jsx): for incoming vip rows, vipTz = myTz() assumes the VIP's browser timezone equals the timezone the booking was made in."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter38_tz_vip_resched.py", "/app/backend/tests/test_iter38_vip_tz_edge.py", "/app/backend/tests/seed_iter38_ui.py", "/app/backend/tests/test_reschedule_iter35.py (old 'vip blocked' assertion updated to the new reschedulable behaviour)"],
+  "success_rate": {"backend": "100% of requested features (10/10 iter38 + 33/33 iter35/37 regression); 2 extra edge tests fail (wall-clock tz bug)", "frontend": "100% of requested flows"},
+  "seed_data_creation": "seed_iter38_ui.py creates test_i38ui_c@example.com (Tom, America/Toronto) and test_i38ui_v@example.com (Vera, VIP, Europe/Paris), password Test@12345, with an invite, a regular booking, 2 vip price-list bookings and 1 vip_sched booking. The script prints IDs and tokens.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && python -m pytest test_iter38_tz_vip_resched.py test_iter38_vip_tz_edge.py -n 0. For UI: python seed_iter38_ui.py > /tmp/seed38.json, then in Playwright create page.context.browser.new_context(timezone_id=...) and set localStorage gd_token. Note: logging in PATCHes users.timezone to the browser timezone. Testids: date-tz-{id}, vs-tz-{id}, date-reschedule-btn-{id}, booking-decline-dialog-suggestions-{i}, resched-accept-{id}, resched-when-{id}.",
+  "rca of the issue": "VIP price-list scheduled_at / proposal scheduled_start are naive 'YYYY-MM-DDTHH:MM:00' strings in the VIP's wall-clock. _pdt() parses them as naive datetimes, then _assert_slot_free, _resched_started and _regular_suggest (offset = local - cur = 0) apply tzinfo=UTC. So every 'now' comparison is off by the VIP's UTC offset. Fix: localize with ZoneInfo(vip_tz) and convert to UTC before comparing."
+}

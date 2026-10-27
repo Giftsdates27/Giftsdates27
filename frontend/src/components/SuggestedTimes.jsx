@@ -9,7 +9,7 @@ const hmMin = (hm) => { const [h, m] = hm.split(":").map(Number); return h * 60 
 const hhmm = (d) => d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 // Regular-date suggestions carry an exact UTC start: show them in the viewer's own clock (same as the date cards).
 const label = (s, lang) => {
-  if (!s.scheduled_start) return { day: fmtDay(s.date, lang), time: `${s.start}–${s.end}` };
+  if (!s.scheduled_start || s.wall) return { day: fmtDay(s.date, lang), time: `${s.start}–${s.end}` };
   const a = new Date(s.scheduled_start), dur = ((hmMin(s.end) - hmMin(s.start)) + 1440) % 1440 || 150;
   return { day: a.toLocaleDateString(lang, { weekday: "short", day: "numeric", month: "short" }), time: `${hhmm(a)}–${hhmm(new Date(a.getTime() + dur * 60000))}` };
 };

@@ -3792,7 +3792,7 @@ async def vip_book(req: DateBookingReq, user=Depends(get_current_user)):
            "coins": req.coins, "extra_hours": req.extra_hours, "extra_coins": extra_coins,
            **({"duration_min": dur_min, "vip_length": req.vip_length, "local_day": req.scheduled_at[:10],
                "slot_from": req.scheduled_at[11:16], "slot_to": _min_to_hm(_hm_to_min(req.scheduled_at[11:16]) + dur_min)} if dur_min else {}),
-           "status": "escrow", "photo_url": None, "release_at": None, "vip": True, "created_at": now}
+           "status": "escrow", "photo_url": None, "release_at": None, "vip": True, "tz": target.get("timezone") or "UTC", "created_at": now}
     await spend_coins(user["id"], req.coins)
     await db.users.update_one({"id": recipient_id}, {"$inc": {"escrow": req.coins}})
     await db.date_bookings.insert_one(doc)
@@ -6016,12 +6016,28 @@ async def _booking_party(bid, uid):
 
 def _booking_dur(b): return _booking_end_min(b) - _booking_start_min(b)
 
+async def _vip_tz(b):
+    if b.get("tz"): return b["tz"]
+    u = await db.users.find_one({"id": b["to_id"]}, {"_id": 0, "timezone": 1}) or {}
+    return u.get("timezone") or "UTC"
+
+def _wall_utc(day, hm, tz):
+    """VIP price-list dates are stored as the VIP's wall-clock time: convert to a real UTC instant."""
+    try: z = ZoneInfo(tz)
+    except Exception: z = timezone.utc
+    return datetime.fromisoformat(f"{day[:10]}T{hm[:5]}:00").replace(tzinfo=z).astimezone(timezone.utc)
+
+async def _booking_start_utc(b):
+    if not b.get("vip"): return _pdt(b["scheduled_at"])
+    return _wall_utc(b.get("local_day") or b["scheduled_at"][:10], b.get("slot_from") or b["scheduled_at"][11:16], await _vip_tz(b))
+
 @api.post("/dates/reschedule/{bid}")
 async def booking_reschedule(bid: str, req: RescheduleReq, user=Depends(get_current_user)):
     b = await _booking_party(bid, user["id"])
     if b["status"] not in RESCHEDULABLE_BOOKING or _report_open(b): raise HTTPException(400, "CANNOT_RESCHEDULE")
-    if _resched_started(_pdt(b["scheduled_at"])): raise HTTPException(400, "DATE_STARTED")
-    await _resched_check(bid, b["to_id"], b["from_id"], req.local_day[:10], req.local_time, _pdt(req.scheduled_start), _booking_dur(b))
+    if _resched_started(await _booking_start_utc(b)): raise HTTPException(400, "DATE_STARTED")
+    new_start = _wall_utc(req.local_day, req.local_time, await _vip_tz(b)) if b.get("vip") else _pdt(req.scheduled_start)
+    await _resched_check(bid, b["to_id"], b["from_id"], req.local_day[:10], req.local_time, new_start, _booking_dur(b))
     prop = _proposal(req, user["id"])
     if b.get("vip"): prop["scheduled_start"] = f"{prop['local_day']}T{prop['local_time']}:00"  # VIP price-list dates keep the VIP's wall-clock time
     await db.date_bookings.update_one({"id": bid}, {"$set": {"reschedule_proposal": prop}})
@@ -6039,7 +6055,7 @@ async def booking_reschedule_answer(bid: str, answer: str, user=Depends(get_curr
     other = p["by"]
     if answer == "accept":
         if p["by"] == user["id"]: raise HTTPException(403, "The other person must accept")
-        start, dur = _pdt(p["scheduled_start"]), _booking_dur(b)
+        start, dur = (_wall_utc(p["local_day"], p["local_time"], await _vip_tz(b)) if b.get("vip") else _pdt(p["scheduled_start"])), _booking_dur(b)
         await _resched_check(bid, b["to_id"], b["from_id"], p["local_day"], p["local_time"], start, dur)
         sm = _hm_to_min(p["local_time"])
         await db.date_bookings.update_one({"id": bid}, {"$set": {
@@ -6097,9 +6113,9 @@ async def booking_suggest(bid: str, user=Depends(get_current_user)):
     b = await _booking_party(bid, user["id"])
     st = _pdt(b["scheduled_at"])
     out = await _regular_suggest(bid, b["to_id"], b["from_id"], b.get("local_day") or b["scheduled_at"][:10],
-                                 b.get("local_time") or st.strftime("%H:%M"), b["scheduled_at"], _booking_dur(b))
+                                 b.get("local_time") or b.get("slot_from") or st.strftime("%H:%M"), _iso(await _booking_start_utc(b)), _booking_dur(b))
     if b.get("vip"):
-        for x in out: x["scheduled_start"] = f"{x['date']}T{x['start']}:00"
+        for x in out: x.update({"scheduled_start": f"{x['date']}T{x['start']}:00", "wall": True})
     return {"suggestions": out}
 
 async def _mirror_to_main_chat(from_id, to_id, text, did):

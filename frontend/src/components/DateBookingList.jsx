@@ -10,7 +10,7 @@ import { CalendarHeart, Camera, Clock, Check, X, Car, Info, Coins, Flag, Calenda
 import RescheduleDialog, { rescheduleErr } from "./RescheduleDialog";
 import RescheduleProposalBar from "./RescheduleProposalBar";
 import TzLines, { tzLabel } from "./TzLines";
-import { myTz, zonedInstant } from "../lib/tz";
+import { myTz, zonedInstant, cityOf } from "../lib/tz";
 import DateReportForm, { DateStartedNote, ReportReplyBlock, ReportStatusNote } from "./DateReportForm";
 import { MapsLink } from "./AddressPicker";
 import VerifiedAddressForm, { addrHintKey, addressReady, addrPayload, addrErrKey, UnverifiedNote } from "./VerifiedAddressForm";
@@ -31,7 +31,7 @@ function BookingTz({ b, inc, lang }) {
   const other = { label: tzLabel(lang, inc ? b.from_name : b.to_name), tz: b.other_tz };
   const dur = b.duration_min || _bookingDur(b);
   if (b.vip) {
-    const vipTz = inc ? myTz() : b.other_tz;
+    const vipTz = b.tz || (inc ? myTz() : b.other_tz);
     const day = b.local_day || b.scheduled_at.slice(0, 10), hmS = b.slot_from || b.scheduled_at.slice(11, 16);
     const s = zonedInstant(day, hmS, vipTz);
     return <TzLines start={s} end={new Date(s.getTime() + dur * 60000)} shownTz={vipTz} people={[{ label: tzLabel(lang), tz: myTz() }, other]} testid={`date-tz-${b.id}`} />;
@@ -41,9 +41,10 @@ function BookingTz({ b, inc, lang }) {
 }
 const _bookingDur = (b) => { if (!b.slot_from || !b.slot_to) return 150; const m = (x) => +x.slice(0, 2) * 60 + +x.slice(3, 5); return ((m(b.slot_to) - m(b.slot_from)) + 1440) % 1440 || 150; };
 
-function VipTimeRange({ b, lang }) {
-  const s = new Date(b.scheduled_at), e = vipEnd(b);
-  return <span data-testid={`date-time-range-${b.id}`}>{s.toLocaleDateString()} · {t("bk_start", lang)} {hm(s)} → {t("bk_finish", lang)} {hm(e)}{e.toDateString() !== s.toDateString() ? " (+1)" : ""}</span>;
+const vipWallTz = (b, inc) => b.tz || (inc ? myTz() : b.other_tz);
+function VipTimeRange({ b, lang, inc }) {
+  const s = new Date(b.scheduled_at), e = vipEnd(b), tz = vipWallTz(b, inc);
+  return <span data-testid={`date-time-range-${b.id}`}>{s.toLocaleDateString()} · {t("bk_start", lang)} {hm(s)} → {t("bk_finish", lang)} {hm(e)}{e.toDateString() !== s.toDateString() ? " (+1)" : ""}{tz ? <span className="text-slate-500" data-testid={`date-time-tz-${b.id}`}> · {cityOf(tz)}</span> : null}</span>;
 }
 
 const STATUS_MAP = { escrow: "status_escrow", accepted: "status_accepted", confirmed: "status_confirmed", released: "status_released", cancelled: "status_cancelled", declined: "status_declined" };
@@ -174,7 +175,7 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
       {b.photo_url && <img src={fileUrl(b.photo_url)} alt="" className="w-full sm:w-24 h-24 rounded-xl object-cover"/>}
       <div className="flex-1">
         <div className="flex items-center gap-2 mb-1"><CalendarHeart size={14} className="text-rose-400"/><span className="font-serif-luxe text-lg">{b.venue}</span></div>
-        <div className="text-xs text-slate-400 flex items-center gap-2"><Clock size={11}/> {b.vip ? <VipTimeRange b={b} lang={lang} /> : new Date(b.scheduled_at).toLocaleString()} · {b.city}</div>
+        <div className="text-xs text-slate-400 flex items-center gap-2"><Clock size={11}/> {b.vip ? <VipTimeRange b={b} lang={lang} inc={isIncoming} /> : new Date(b.scheduled_at).toLocaleString()}{b.city && b.city !== "-" ? ` · ${b.city}` : ""}</div>
         <BookingTz b={b} inc={isIncoming} lang={lang} />
         {(b.address || b.lat || b.postal_code) && <div className="text-xs text-slate-400 mt-0.5">{[b.address, b.postal_code, b.country].filter(Boolean).join(" · ")} <MapsLink loc={b} testid={`date-maps-link-${b.id}`} /><UnverifiedNote show={b.unverified} testid={`booking-unverified-${b.id}`} /></div>}
         {b.meet?.address && <div className="text-xs text-emerald-300 mt-0.5" data-testid={`meet-location-${b.id}`}>📍 {t("meet_location", lang)}: {[b.meet.address, b.meet.postal_code, b.meet.country].filter(Boolean).join(" · ")} <MapsLink loc={{ ...b.meet, venue: b.venue }} testid={`meet-maps-link-${b.id}`} /><UnverifiedNote show={b.meet?.unverified} testid={`meet-unverified-${b.id}`} /></div>}
@@ -325,7 +326,7 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
         )}
       </div>
     </div>
-      {b.reschedule_proposal && ["escrow", "accepted", "confirmed"].includes(b.status) && <RescheduleProposalBar id={b.id} p={b.reschedule_proposal} mine={b.reschedule_proposal.by === user?.id}
+      {b.reschedule_proposal && ["escrow", "accepted", "confirmed"].includes(b.status) && <RescheduleProposalBar id={b.id} p={b.reschedule_proposal} mine={b.reschedule_proposal.by === user?.id} wallTz={b.vip ? vipWallTz(b, isIncoming) : undefined}
         otherName={isIncoming ? b.from_name : b.to_name} url={`/dates/reschedule/${b.id}`} onDone={load} />}
       {started && !underReview && b.status !== "released" && <DateStartedNote id={b.id} />}
       {reportFor === b.id && <DateReportForm id={b.id} onSubmit={(p) => submitReport(b.id, p)} role={isIncoming ? "recipient" : "inviter"} />}

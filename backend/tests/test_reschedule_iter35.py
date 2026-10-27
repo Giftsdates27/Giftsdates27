@@ -212,7 +212,9 @@ class TestBookingReschedule:
         assert answer(S["Ah"], S["bk"], "decline", "b").status_code == 200
         b = mdb.date_bookings.find_one({"id": S["bk"]}); assert b["slot_from"] == "15:00" and "reschedule_proposal" not in b
         mdb.date_bookings.update_one({"id": S["bk"]}, {"$set": {"vip": True}})
-        r = resched(S["Ah"], S["bk"], D2, "19:30", kind="b"); assert r.status_code == 400 and "CANNOT_RESCHEDULE" in detail(r)
+        # iter38: VIP price-list bookings are now reschedulable (no CANNOT_RESCHEDULE)
+        r = resched(S["Ah"], S["bk"], D2, "19:30", kind="b"); assert r.status_code == 200 and "CANNOT_RESCHEDULE" not in r.text, r.text
+        answer(S["Ah"], S["bk"], "decline", "b")
         mdb.date_bookings.update_one({"id": S["bk"]}, {"$unset": {"vip": ""}})
         assert resched(S["Ch"], S["bk"], D2, "19:30", kind="b").status_code == 403
 
