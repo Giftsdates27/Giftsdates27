@@ -3300,6 +3300,7 @@ async def request_taxi(bid: str, req: TaxiRequestReq, user=Depends(get_current_u
     b = await db.date_bookings.find_one({"id": bid})
     if not b: raise HTTPException(404, "Not found")
     if b["to_id"] != user["id"]: raise HTTPException(403, "Only the invited person can request a taxi")
+    if b.get("place") == "own": raise HTTPException(400, "TAXI_NOT_ALLOWED")
     if b["status"] not in ("escrow", "accepted", "confirmed"): raise HTTPException(400, "Cannot request taxi")
     if req.coins < 1: raise HTTPException(400, "Invalid amount")
     if (b.get("taxi") or {}).get("status") == "pending": raise HTTPException(400, "TAXI_PENDING")
@@ -4264,8 +4265,9 @@ async def vs_decline(bid: str, reason: Optional[str] = None, user=Depends(get_cu
 async def vs_taxi_request(bid: str, req: TaxiRequestReq, user=Depends(get_current_user)):
     b = await db.vip_sched.find_one({"id": bid}, {"_id": 0})
     if not b: raise HTTPException(404, "Not found")
-    # date at the VIP's place → the inviter travels and may ask the VIP; otherwise the VIP travels and asks the inviter
-    by = "client" if b.get("place") == "own" else "vip"
+    # taxi only when the VIP travels: date at the client's place or elsewhere (never at the VIP's own place)
+    if b.get("place") == "own": raise HTTPException(400, "TAXI_NOT_ALLOWED")
+    by = "vip"
     if user["id"] != (b["requester_id"] if by == "client" else b["vip_id"]):
         raise HTTPException(403, "Only the person travelling to the date can request a taxi")
     if b["status"] not in ("pending", "confirmed"): raise HTTPException(400, "Cannot request taxi")

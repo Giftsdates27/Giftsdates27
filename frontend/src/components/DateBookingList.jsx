@@ -217,7 +217,7 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
                 <Button size="sm" variant="ghost" onClick={() => setTaxiFor(null)} className="text-slate-400 h-9">{t("cancel", lang)}</Button>
               </div>
             );
-            if (active && (!taxi || taxi.status === "declined")) return <button data-testid={`taxi-request-btn-${b.id}`} onClick={() => setTaxiFor({ id: b.id, coins: "" })} className="mt-2 text-xs text-sky-300 hover:underline inline-flex items-center gap-1"><Car size={12}/> {t("request_taxi", lang)}</button>;
+            if (active && b.place !== "own" && (!taxi || taxi.status === "declined")) return <button data-testid={`taxi-request-btn-${b.id}`} onClick={() => setTaxiFor({ id: b.id, coins: "" })} className="mt-2 text-xs text-sky-300 hover:underline inline-flex items-center gap-1"><Car size={12}/> {t("request_taxi", lang)}</button>;
             return null;
           }
           if (taxi?.status === "pending") return (

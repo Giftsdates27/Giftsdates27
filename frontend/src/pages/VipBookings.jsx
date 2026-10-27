@@ -27,7 +27,7 @@ import ExtendDateButton from "../components/ExtendDateButton";
 import { t } from "../lib/i18n";
 import { MapsLink } from "../components/AddressPicker";
 import { UnverifiedNote } from "../components/VerifiedAddressForm";
-import { placeLabel } from "../lib/vipCatalog";
+import { placeFor } from "../lib/vipCatalog";
 import DateBookingList from "../components/DateBookingList";
 import { DatesStatTiles, DatesTabBar, TabEmpty } from "../components/DatesUI";
 import { DATE_TABS, tabOf, countByTab } from "../lib/dateFilters";
@@ -75,7 +75,7 @@ function BookingPlace({ b, lang, who }) {
   return (
     <div className="text-xs text-slate-400 mt-1 flex flex-wrap items-center gap-1.5" data-testid={`vs-booking-place-${b.id}`}>
       <MapPin size={12} className="text-rose-300" />
-      {b.place && <span className="text-slate-200">{who === "outgoing" && b.place === "own" ? t("place_vip", lang) : placeLabel(b.place, lang)}</span>}
+      {b.place && <span className="text-slate-200">{placeFor(b.place, who === "outgoing" ? "client" : "vip", lang, t)}</span>}
       {loc.address ? <><span>· {[loc.address, loc.postal_code, loc.city, loc.country].filter(Boolean).join(", ")}</span> <MapsLink loc={loc} testid={`vs-booking-maps-${b.id}`} /></>
         : b.address_hidden ? <span className="text-amber-300/80">· {t("addr_hidden", lang)}</span> : null}
     </div>

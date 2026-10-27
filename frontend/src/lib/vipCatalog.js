@@ -91,4 +91,10 @@ export const extraPrice = (prices) => Math.max(EXTRA_HOUR_MIN, Number(prices?.ex
 export const svcLabel = (ru, lang) => (lang === "ru" ? ru : (SVC_TR[ru]?.[lang] || SVC_TR[ru]?.en || ru));
 export const catTitle = (key, lang) => pick(CAT_TITLES[key], lang);
 export const placeLabel = (v, lang) => { const p = VIP_PLACES.find((x) => x.v === v); return p ? pick(p.tr, lang) : v; };
+// Place as seen by each side of a booking: the client says "At my place" for their own place, the VIP sees "At the client's place".
+export const placeFor = (v, viewer, lang, t) => {
+  if (v === "own") return viewer === "client" ? t("place_vip", lang) : placeLabel("own", lang);
+  if (v === "your") return t(viewer === "client" ? "place_mine" : "place_client", lang);
+  return placeLabel(v, lang);
+};
 export const priceLabel = (k, lang) => { const p = PRICE_KEYS.find((x) => x.k === k); return p ? pick(p.tr, lang) : k; };

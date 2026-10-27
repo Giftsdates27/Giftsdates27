@@ -53,11 +53,11 @@ export default function VipTaxiBlock({ b, who, onDone }) {
   const { lang } = useApp();
   const tx = b.taxi;
   const active = ["pending", "confirmed"].includes(b.status);
-  // at the VIP's place the inviter travels and asks the VIP; anywhere else the VIP asks the inviter
-  const asker = b.place === "own" ? "outgoing" : "incoming";
+  // taxi only when the VIP travels (date at the client's place or elsewhere); the VIP asks, the client pays
+  const asker = "incoming";
   const txAsker = tx ? (tx.by === "client" ? "outgoing" : "incoming") : asker;
   const warn = who === "incoming" && b.status === "pending";
-  const canAsk = who === asker && active && (!tx || tx.status === "declined");
+  const canAsk = b.place !== "own" && who === asker && active && (!tx || tx.status === "declined");
   const canPay = who !== txAsker && active && tx?.status === "pending" && !(txAsker === "incoming" && ["offered", "address_set"].includes(b.pickup?.status));
   if (!warn && !tx && !canAsk) return null;
   return (

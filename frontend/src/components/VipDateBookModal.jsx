@@ -5,7 +5,7 @@ import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Calendar, Clock, Loader2, Hourglass, MapPin } from "lucide-react";
 import VerifiedAddressForm, { addrHintKey, addressReady, addrPayload, addrErrKey } from "./VerifiedAddressForm";
-import { placeLabel } from "../lib/vipCatalog";
+import { placeFor } from "../lib/vipCatalog";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { useApp } from "../context/AppContext";
@@ -91,7 +91,7 @@ export default function VipDateBookModal({ open, onOpenChange, target, reschedul
         const r = await api.post(`/vip/schedule/bookings/${rescheduleId}/reschedule`, { date: day, start: slot.start, end: slot.end });
         toast.success(t(r.data?.proposal ? "rsch_sent" : "bk_resched_sent", lang));
       } else {
-        await api.post(`/vip/schedule/${target.id}/book`, { date: day, start: slot.start, end: slot.end, length, venue: place ? placeLabel(place, lang) : "", tz: dayObj?.tz,
+        await api.post(`/vip/schedule/${target.id}/book`, { date: day, start: slot.start, end: slot.end, length, venue: place ? placeFor(place, "vip", "en", t) : "", tz: dayObj?.tz,
           place, ...(place && place !== "own" ? addrPayload(loc) : {}) });
         toast.success(t("bk_sent", lang));
       }
@@ -171,7 +171,7 @@ export default function VipDateBookModal({ open, onOpenChange, target, reschedul
                   <div className="space-y-1.5" data-testid="vs-book-places">
                     {data.places.map((pv) => (
                       <button key={pv} type="button" onClick={() => setPlace(pv)} data-testid={`vs-book-place-${pv}`} className={rowCls(place === pv)}>
-                        <span>{pv === "own" ? t("place_vip", lang) : placeLabel(pv, lang)}</span>{place === pv && <span className="h-2 w-2 rounded-full bg-rose-400 shrink-0" />}
+                        <span>{placeFor(pv, "client", lang, t)}</span>{place === pv && <span className="h-2 w-2 rounded-full bg-rose-400 shrink-0" />}
                       </button>
                     ))}
                   </div>

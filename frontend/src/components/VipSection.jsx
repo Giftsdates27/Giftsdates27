@@ -8,7 +8,7 @@ import { useApp } from "../context/AppContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import VerifiedAddressForm, { addrHintKey, addressReady, addrPayload, addrErrKey } from "./VerifiedAddressForm";
-import { PRICE_KEYS, svcLabel, placeLabel, priceLabel, extraLabel, extraPrice, EXTRA_HOUR_MIN } from "../lib/vipCatalog";
+import { PRICE_KEYS, svcLabel, placeLabel, placeFor, priceLabel, extraLabel, extraPrice, EXTRA_HOUR_MIN } from "../lib/vipCatalog";
 import ExtraHoursStepper from "./ExtraHoursStepper";
 import { t } from "../lib/i18n";
 
@@ -97,7 +97,7 @@ export default function VipSection({ userId, name, preview }) {
       const providerHosts = place === "own";
       await api.post("/vip/book", {
         target_id: userId,
-        venue: place ? placeLabel(place, lang) : "VIP",
+        venue: place ? placeFor(place, "vip", "en", t) : "VIP",
         place: place || null,
         city: (!providerHosts && loc.city) || data.city || "-",
         address: providerHosts ? "" : (loc.address || ""),
@@ -213,7 +213,7 @@ export default function VipSection({ userId, name, preview }) {
               <div className="flex flex-wrap gap-2">
                 {v.places.map((pv) => (
                   <button key={pv} data-testid={`vip-book-place-${pv}`} onClick={() => setPlace(pv)}
-                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${place === pv ? "bg-amber-500/20 border-amber-500/50 text-amber-200" : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"}`}>{pv === "own" ? t("place_vip", lang) : placeLabel(pv, lang)}</button>
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${place === pv ? "bg-amber-500/20 border-amber-500/50 text-amber-200" : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"}`}>{placeFor(pv, "client", lang, t)}</button>
                 ))}
               </div>
               {place && place !== "own" && (
