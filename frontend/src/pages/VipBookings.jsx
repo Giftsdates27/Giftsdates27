@@ -146,7 +146,12 @@ function BookingCard({ b, who, onConfirm, onDecline, onCancel, onReschedule, onR
     <div className={`glass rounded-2xl p-4 border-s-2 ${ACCENT[b.status] || "border-s-white/10"} transition-colors hover:bg-white/[0.04]`} data-testid={`vs-booking-${b.id}`}>
     <div className="flex flex-col sm:flex-row sm:items-center gap-4">
       <div className="flex items-center gap-3 flex-1 min-w-0">
-        <Avatar card={card} />
+        <div className="flex flex-col items-center gap-1 shrink-0">
+          <Avatar card={card} />
+          <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-200 font-mono-num whitespace-nowrap" title={t("vb_total_hours", lang)} data-testid={`vs-hours-${b.id}`}>
+            <Clock size={9} />{+((end - start) / 3600000).toFixed(2)}h
+          </span>
+        </div>
         <div className="min-w-0">
           <div className="font-semibold text-white truncate">{card?.name}{card?.age ? `, ${card.age}` : ""}</div>
           <div className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">

@@ -177,7 +177,8 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
     <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
       {b.photo_url && <img src={fileUrl(b.photo_url)} alt="" className="w-full sm:w-24 h-24 rounded-xl object-cover"/>}
       <div className="flex-1">
-        <div className="flex items-center gap-2 mb-1"><CalendarHeart size={14} className="text-rose-400"/><span className="font-serif-luxe text-lg">{b.venue}</span></div>
+        <div className="flex items-center gap-2 mb-1"><CalendarHeart size={14} className="text-rose-400"/><span className="font-serif-luxe text-lg">{b.venue}</span>
+          {b.vip && b.duration_min && <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-200 font-mono-num" title={t("vb_total_hours", lang)} data-testid={`date-hours-${b.id}`}><Clock size={9} />{+(b.duration_min / 60).toFixed(2)}h</span>}</div>
         <div className="text-xs text-slate-400 flex items-center gap-2"><Clock size={11}/> {b.vip ? <VipTimeRange b={b} lang={lang} inc={isIncoming} /> : new Date(b.scheduled_at).toLocaleString()}{b.city && b.city !== "-" ? ` · ${b.city}` : ""}</div>
         <BookingTz b={b} inc={isIncoming} lang={lang} />
         {(b.address || b.lat || b.postal_code) && <div className="text-xs text-slate-400 mt-0.5">{[b.address, b.postal_code, b.country].filter(Boolean).join(" · ")} <MapsLink loc={b} testid={`date-maps-link-${b.id}`} /><UnverifiedNote show={b.unverified} testid={`booking-unverified-${b.id}`} /></div>}
