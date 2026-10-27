@@ -4048,10 +4048,21 @@ async def _vs_earnings(vip_id: str, bookings: list) -> dict:
         if b["status"] == "completed": add(b.get("completed_at"), b.get("coins"))
         elif b["status"] == "cancelled": add(b.get("cancelled_at"), b.get("compensation"))
     held = sum(int(b.get("coins") or 0) for b in bookings if b["status"] in ("pending", "confirmed", "reported"))
-    async for d in db.date_bookings.find({"to_id": vip_id, "vip": True}, {"_id": 0, "status": 1, "coins": 1, "released_net": 1, "released_at": 1}):
+    hours, pending_hours = 0.0, 0.0
+    def dur_h(s, e): return (((_hm_to_min(e) - _hm_to_min(s)) % 1440) or 1440) / 60
+    for b in bookings:
+        if str(b.get("date", ""))[:7] != months[-1]: continue
+        if b["status"] in ("confirmed", "completed"): hours += dur_h(b["start"], b["end"])
+        elif b["status"] == "pending": pending_hours += dur_h(b["start"], b["end"])
+    async for d in db.date_bookings.find({"to_id": vip_id, "vip": True}, {"_id": 0, "status": 1, "coins": 1, "released_net": 1, "released_at": 1, "local_day": 1, "scheduled_at": 1, "duration_min": 1}):
         if d["status"] == "released": add(d.get("released_at"), d.get("released_net"))
         elif d["status"] in ("escrow", "accepted", "confirmed"): held += int(d.get("coins") or 0)
-    return {"month": months[-1], "earned": by[months[-1]], "held": held, "by_month": [{"month": k, "earned": by[k]} for k in months]}
+        if str(d.get("local_day") or d.get("scheduled_at") or "")[:7] == months[-1]:
+            h = (d.get("duration_min") or DATE_SLOT_MINUTES) / 60
+            if d["status"] in ("accepted", "confirmed", "released"): hours += h
+            elif d["status"] == "escrow": pending_hours += h
+    return {"month": months[-1], "earned": by[months[-1]], "held": held, "by_month": [{"month": k, "earned": by[k]} for k in months],
+            "hours": round(hours, 2), "pending_hours": round(pending_hours, 2)}
 
 @api.get("/vip/schedule/pending-count")
 async def vs_pending_count(user=Depends(get_current_user)):

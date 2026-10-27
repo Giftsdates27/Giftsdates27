@@ -291,8 +291,17 @@ export default function VipBookings() {
         </div>
         {isVip && (
           <div className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-transparent px-4 py-2.5" data-testid="vs-earnings-tile">
-            <div className="text-[10px] uppercase tracking-wider text-amber-300/80">{t("er_month", lang)}</div>
-            <div className="font-mono-num text-2xl leading-tight text-amber-200 mt-0.5" data-testid="vs-earnings-month">🪙 {earn.earned.toLocaleString()}</div>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-amber-300/80">{t("er_month", lang)}</div>
+                <div className="font-mono-num text-2xl leading-tight text-amber-200 mt-0.5" data-testid="vs-earnings-month">🪙 {earn.earned.toLocaleString()}</div>
+              </div>
+              <div className="text-end" data-testid="vs-hours-month-box">
+                <div className="text-[10px] uppercase tracking-wider text-amber-300/80">{t("vb_hours_month", lang)}</div>
+                <div className="font-mono-num text-2xl leading-tight text-white mt-0.5 flex items-center justify-end gap-1" data-testid="vs-hours-month"><Clock size={16} className="text-amber-300" />{+(earn.hours || 0)}h</div>
+                {earn.pending_hours > 0 && <div className="text-[10px] text-slate-400" data-testid="vs-hours-pending">+{+earn.pending_hours}h {t("vs_lock_pending", lang)}</div>}
+              </div>
+            </div>
             <div className="text-[11px] text-slate-400 mt-1" data-testid="vs-earnings-held">🔒 {earn.held.toLocaleString()} · {t("er_held", lang)}</div>
             {earn.by_month?.length > 0 && <EarningsChart data={earn.by_month} />}
           </div>

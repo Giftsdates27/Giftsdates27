@@ -258,6 +258,7 @@ export const VS_T = {
   rsch_length: row("Same length as your booking: {h}h"),
   sort_by: row("Sort:"),
   vb_total_hours: row("Total hours booked (incl. extra hours)"),
+  vb_hours_month: row("Hours booked this month"),
   sort_auto: row("Recommended"),
   sort_soonest: row("Date — soonest first"),
   sort_latest: row("Date — latest first"),
