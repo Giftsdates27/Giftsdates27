@@ -75,7 +75,7 @@ function DateChat({ did, meId, lang }) {
 function DateTimeRange({ id, start }) {
   const { lang } = useApp();
   const s = new Date(start), e = new Date(s.getTime() + 150 * 60000);
-  return <BigTime day={dayOf(s, lang)} start={hmOf(s, lang)} end={hmOf(e, lang)} nextDay={e.toDateString() !== s.toDateString()} hours={2.5} testid={`date-time-range-${id}`} />;
+  return <BigTime day={dayOf(s, lang)} start={hmOf(s, lang)} end={hmOf(e, lang)} nextDay={e.toDateString() !== s.toDateString()} hours={2.5} startAt={s} endAt={e} testid={`date-time-range-${id}`} />;
 }
 
 function SwitchToTaxi({ d, busy, onSend }) {

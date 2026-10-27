@@ -181,9 +181,10 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
       <div className="flex-1">
         <div className="flex items-center gap-2 mb-1"><CalendarHeart size={14} className="text-rose-400"/><span className="font-serif-luxe text-lg">{b.venue}</span>
           {b.vip && b.duration_min && <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-200 font-mono-num" title={t("vb_total_hours", lang)} data-testid={`date-hours-${b.id}`}><Clock size={9} />{+(b.duration_min / 60).toFixed(2)}h</span>}</div>
-        <div className="text-xs text-slate-400 flex items-center gap-2"><Clock size={11}/> {b.vip ? <VipTimeRange b={b} lang={lang} inc={isIncoming} /> : new Date(b.scheduled_at).toLocaleString()}{b.city && b.city !== "-" ? ` · ${b.city}` : ""}</div>
+        {b.city && b.city !== "-" && <div className="text-xs text-slate-400">{b.city}</div>}
         {(() => { const s = new Date(b.scheduled_at), e = b.vip ? vipEnd(b) : new Date(s.getTime() + (b.duration_min || _bookingDur(b)) * 60000);
-          return <BigTime day={dayOf(s, lang)} start={hmOf(s, lang)} end={hmOf(e, lang)} nextDay={e.toDateString() !== s.toDateString()} testid={`date-bigtime-${b.id}`} />; })()}
+          const sAt = b.vip ? zonedInstant(b.local_day || b.scheduled_at.slice(0, 10), b.slot_from || b.scheduled_at.slice(11, 16), vipWallTz(b, isIncoming)) : s;
+          return <BigTime day={dayOf(s, lang)} start={hmOf(s, lang)} end={hmOf(e, lang)} nextDay={e.toDateString() !== s.toDateString()} startAt={sAt} endAt={new Date(sAt.getTime() + (e - s))} testid={`date-bigtime-${b.id}`} />; })()}
         <BookingTz b={b} inc={isIncoming} lang={lang} />
         {(b.address || b.lat || b.postal_code) && <div className="text-xs text-slate-400 mt-0.5">{[b.address, b.postal_code, b.country].filter(Boolean).join(" · ")} <MapsLink loc={b} testid={`date-maps-link-${b.id}`} /><UnverifiedNote show={b.unverified} testid={`booking-unverified-${b.id}`} /></div>}
         {b.meet?.address && <div className="text-xs text-emerald-300 mt-0.5" data-testid={`meet-location-${b.id}`}>📍 {t("meet_location", lang)}: {[b.meet.address, b.meet.postal_code, b.meet.country].filter(Boolean).join(" · ")} <MapsLink loc={{ ...b.meet, venue: b.venue }} testid={`meet-maps-link-${b.id}`} /><UnverifiedNote show={b.meet?.unverified} testid={`meet-unverified-${b.id}`} /></div>}

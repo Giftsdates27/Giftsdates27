@@ -4008,12 +4008,8 @@ async def _vs_autocomplete(vip_id: str):
     now = datetime.now(timezone.utc)
     conf = await db.vip_sched.find({"vip_id": vip_id, "status": "confirmed"}).to_list(500)
     for b in conf:
-        try:
-            end_date = b["date"]
-            if str(b.get("end", "")) <= str(b.get("start", "")):  # ends after midnight → next calendar day
-                end_date = (datetime.fromisoformat(b["date"]) + timedelta(days=1)).strftime("%Y-%m-%d")
-            end_dt = datetime.fromisoformat(f"{end_date}T{b['end']}:00+00:00")
-        except Exception:
+        end_dt = _vs_end_dt(b)  # times are the VIP's wall clock in b.tz
+        if not end_dt:
             continue
         if end_dt <= now:
             coins = int(b.get("coins") or 0)

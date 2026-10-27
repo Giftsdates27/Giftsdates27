@@ -156,14 +156,8 @@ function BookingCard({ b, who, onConfirm, onDecline, onCancel, onReschedule, onR
         </div>
         <div className="min-w-0">
           <div className="font-semibold text-white truncate">{card?.name}{card?.age ? `, ${card.age}` : ""}</div>
-          <div className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
-            <Calendar size={12} /> {fmtDay(b.date)}
-          </div>
-          <div className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5 font-mono-num">
-            <Clock size={12} /> <span data-testid={`vs-booking-time-${b.id}`}>{t("bk_start", lang)} {b.start} → {t("bk_finish", lang)} {b.end}{end.getDate() !== start.getDate() ? " (+1)" : ""}</span> <span className="text-slate-600">·</span> {b.tz}
-            {live && <span className="ms-1 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300" data-testid={`vs-live-${b.id}`}>{t("ext_in_progress", lang)}</span>}
-          </div>
-          <BigTime day={dayOf(new Date(`${b.date}T12:00:00`), lang)} start={b.start} end={b.end} nextDay={end.getDate() !== start.getDate()} testid={`vs-bigtime-${b.id}`} />
+          {(() => { const sAt = zonedInstant(b.date, b.start, b.tz);
+            return <BigTime day={dayOf(new Date(`${b.date}T12:00:00`), lang)} start={b.start} end={b.end} nextDay={end.getDate() !== start.getDate()} startAt={sAt} endAt={new Date(sAt.getTime() + (end - start))} testid={`vs-bigtime-${b.id}`} />; })()}
           {(() => { const s = zonedInstant(b.date, b.start, b.tz), e = new Date(s.getTime() + (end - start));
             return <TzLines start={s} end={e} shownTz={b.tz} people={[{ label: tzLabel(lang), tz: myTz() }, { label: tzLabel(lang, card?.name), tz: who === "incoming" ? b.requester?.tz : b.vip_card?.tz }]} testid={`vs-tz-${b.id}`} />; })()}
           <BookingPlace b={b} lang={lang} who={who} />
