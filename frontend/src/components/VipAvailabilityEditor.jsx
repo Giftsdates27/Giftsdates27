@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Calendar } from "./ui/calendar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
-import { Plus, Trash2, CalendarClock, Loader2, Repeat } from "lucide-react";
+import { Plus, Trash2, CalendarClock, Loader2, Repeat, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { useApp } from "../context/AppContext";
@@ -17,7 +17,7 @@ const fmtDay = (d) => { try { return fromKey(d).toLocaleDateString(undefined, { 
 const toApi = (rs) => rs.map((r) => ({ start: r.from, end: r.to }));
 const ERR = { VIP_REQUIRED: "vs_vip_required", NO_WEEKDAYS: "vs_pick_day_err", NOTHING_TO_ADD: "vs_pick_day_err", HAS_BOOKINGS: "vs_has_bookings", TIME_OVERLAP: "vs_overlap_err" };
 
-function PublishedList({ blocks, onRemove, onRemoveAll, onRemoveDay, lang }) {
+function PublishedList({ blocks, locks = {}, onRemove, onRemoveAll, onRemoveDay, lang }) {
   const byDate = {};
   blocks.forEach((b) => { (byDate[b.date] = byDate[b.date] || []).push(b); });
   const dates = Object.keys(byDate).sort();
@@ -46,6 +46,17 @@ function PublishedList({ blocks, onRemove, onRemoveAll, onRemoveDay, lang }) {
                   </span>
                 ))}
               </div>
+              {(locks[d] || []).length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-1.5" data-testid={`vs-avail-locks-${d}`}>
+                  {[...locks[d]].sort((a, b) => a.lock_from.localeCompare(b.lock_from)).map((l, i) => (
+                    <span key={i} data-testid={`vs-avail-lock-${d}-${i}`} title={t("vs_lock_hint", lang)}
+                      className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg font-mono-num border ${l.status === "pending" ? "bg-amber-500/10 border-amber-500/40 text-amber-200" : "bg-rose-500/10 border-rose-500/40 text-rose-200"}`}>
+                      <Lock size={10} />{l.lock_from}–{l.lock_to}
+                      <span className="text-[10px] opacity-75 font-sans">· {t(l.status === "pending" ? "vs_lock_pending" : l.status === "date" ? "vs_lock_date" : "vs_lock_booked", lang)} {l.from}–{l.to}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -55,7 +66,13 @@ function PublishedList({ blocks, onRemove, onRemoveAll, onRemoveDay, lang }) {
 }
 
 export default function VipAvailabilityEditor({ blocks = [], onChanged }) {
-  const { lang } = useApp();
+  const { lang, user } = useApp();
+  const [locks, setLocks] = useState({});
+  // Locked periods (each booking + 15 min before/after), refreshed whenever bookings or availability change.
+  useEffect(() => {
+    if (!user?.id) return;
+    api.get(`/vip/schedule/${user.id}/slots`).then((r) => setLocks(Object.fromEntries((r.data.days || []).map((d) => [d.date, d.taken || []])))).catch(() => {});
+  }, [user?.id, blocks]);
   const [days, setDays] = useState([]);
   const [ranges, setRanges] = useState([DEFAULT_WIN]);
   const [weekly, setWeekly] = useState({});
@@ -138,7 +155,8 @@ export default function VipAvailabilityEditor({ blocks = [], onChanged }) {
           {btn(addWeekly, t("vs_add_weekly", lang), "vs-avail-add-weekly")}
         </TabsContent>
       </Tabs>
-      <PublishedList blocks={blocks} onRemove={remove} onRemoveAll={removeAll} onRemoveDay={removeDay} lang={lang} />
+      <p className="text-[11px] text-slate-500 mb-2" data-testid="vs-avail-lock-note"><Lock size={10} className="inline me-1" />{t("vs_lock_note", lang)}</p>
+      <PublishedList blocks={blocks} locks={locks} onRemove={remove} onRemoveAll={removeAll} onRemoveDay={removeDay} lang={lang} />
     </div>
   );
 }

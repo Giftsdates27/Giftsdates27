@@ -2767,7 +2767,7 @@ def _block(day, start_min, reason, end_min=None):
     return day, {"from": _min_to_hm(start_min), "to": _min_to_hm(end_min), "reason": reason,
                  "lock_from": _min_to_hm(max(0, start_min - DATE_BUFFER)), "lock_to": _min_to_hm(end_min + DATE_BUFFER)}
 
-async def _taken_blocks(u, exclude=None):
+async def _taken_blocks(u, exclude=None, include_vs=True):
     """Every locked block per local day for a user: other dates (booked), pending reschedule proposals (booked) and cancelled dates/slots (cancelled)."""
     uid, out = u["id"], {}
     unlocked = set(u.get("unlocked_slots") or [])
@@ -2792,8 +2792,32 @@ async def _taken_blocks(u, exclude=None):
     for ls in (u.get("locked_slots") or []):
         st = _pdt(ls.get("start"))
         if st: add(ls.get("date") or st.strftime("%Y-%m-%d"), st.hour * 60 + st.minute, "cancelled")
+    if include_vs:
+        await _add_vs_blocks(uid, u, lambda d, b: out.setdefault(d, []).append(b), exclude)
     # de-duplicate identical blocks (e.g. a rejected invite also stored in locked_slots)
     return {k: [dict(t) for t in {tuple(sorted(x.items())) for x in v}] for k, v in out.items()}
+
+async def _add_vs_blocks(uid, u, add_raw, exclude=None):
+    """VIP calendar bookings (as VIP or client) + their pending proposals lock the user's normal calendar too (15-min buffer each side)."""
+    docs = await db.vip_sched.find({"status": {"$in": ["pending", "confirmed"]}, "id": {"$ne": exclude}, "$or": [{"vip_id": uid}, {"requester_id": uid}]},
+                                   {"_id": 0, "date": 1, "start": 1, "end": 1, "tz": 1, "reschedule_proposal": 1}).to_list(500)
+    if not docs: return
+    utz = u.get("timezone") or ((await db.users.find_one({"id": uid}, {"_id": 0, "timezone": 1})) or {}).get("timezone")
+    def put(date, start, end, tz):
+        dur = (_hm_to_min(end) - _hm_to_min(start)) % 1440 or 60
+        if utz and tz and utz != tz:
+            try:
+                loc = _wall_utc(date, start, tz).astimezone(ZoneInfo(utz))
+                date, start = loc.strftime("%Y-%m-%d"), loc.strftime("%H:%M")
+            except Exception: pass
+        sm = _hm_to_min(start)
+        d, b = _block(date, sm, "booked", sm + dur)
+        b["lock_from"] = _min_to_hm(max(0, sm - VIP_SCHED_BUFFER)); b["lock_to"] = _min_to_hm(sm + dur + VIP_SCHED_BUFFER)
+        add_raw(d, b)
+    for b in docs:
+        put(b["date"], b["start"], b["end"], b.get("tz"))
+        p = b.get("reschedule_proposal")
+        if p: put(p["date"], p["start"], p["end"], b.get("tz"))
 
 async def _assert_slot_free(u, day, start_min, start_dt, exclude=None, dur=DATE_SLOT_MINUTES, busy_only=False):
     """Reject past start times and any overlap with another date or a cancelled (locked) slot, incl. 15-min buffer."""
@@ -3945,7 +3969,7 @@ VIP_DURATIONS = (60, 120, 180)
 async def _vs_normal_locks(vip_id, date):
     """Normal-date lock windows (already include the 15-min buffer) of the VIP on a day."""
     u = await db.users.find_one({"id": vip_id}, {"_id": 0})
-    return [b for b in (await _taken_blocks(u)).get(date, []) if b["reason"] != "cancelled"] if u else []
+    return [b for b in (await _taken_blocks(u, include_vs=False)).get(date, []) if b["reason"] != "cancelled"] if u else []
 
 async def _vs_extra_checks(vip_id, date, cs, ce):
     if ce - cs < 60 or (ce - cs) % 60: raise HTTPException(400, "BAD_DURATION")
