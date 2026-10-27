@@ -4628,6 +4628,7 @@ async def vs_my_requests(user=Depends(get_current_user)):
         b["extra_hour_price"] = vip_extra_price(vip or {})
         b["vip_card"] = {"id": b["vip_id"], "name": (vip or {}).get("name") or "VIP", "photo": ((vip or {}).get("photos") or [None])[0], "tz": (vip or {}).get("timezone") or b.get("tz")}
         await _attach_arrival_note(b, b["vip_id"], b["status"] == "confirmed")
+        if b.get("pickup") and b["status"] != "confirmed": b["pickup"].pop("note", None)  # pick-up place note only on confirmed dates
         out.append(_hide_own_address(b, b["status"] in ("confirmed", "completed")))
     return {"requests": out}
 

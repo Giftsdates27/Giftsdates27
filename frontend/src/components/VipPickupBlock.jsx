@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Car, Loader2, MapPin, Check, X, Send, Ban, Pencil, Hourglass } from "lucide-react";
+import { Car, Loader2, MapPin, Check, X, Send, Ban, Pencil, Hourglass, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -18,30 +18,24 @@ const errMsg = (e, lang) => {
 function AddressForm({ b, onDone, onClose, lang }) {
   const pu = b.pickup || {};
   const [loc, setLoc] = useState(pu.address ? { address: pu.address, city: pu.city, postal_code: pu.postal_code, country: pu.country, lat: pu.lat, lng: pu.lng, verified: pu.lat != null, confirmed: !!pu.unverified } : {});
-  const [time, setTime] = useState(pu.time || b.start);
   const [note, setNote] = useState(pu.note || "");
   const [busy, setBusy] = useState(false);
   const send = async () => {
     if (!addressReady(loc, false)) { toast.error(t(addrHintKey(loc, false), lang)); return; }
     setBusy(true);
-    try { await api.post(`/vip/schedule/bookings/${b.id}/pickup/address`, { ...addrPayload(loc), time, note }); toast.success(t("pu_addr_sent_toast", lang)); onClose?.(); onDone?.(); }
+    try { await api.post(`/vip/schedule/bookings/${b.id}/pickup/address`, { ...addrPayload(loc), note }); toast.success(t("pu_addr_sent_toast", lang)); onClose?.(); onDone?.(); }
     catch (e) { toast.error(errMsg(e, lang)); }
     finally { setBusy(false); }
   };
   return (
     <div className="space-y-2.5" data-testid={`vs-pickup-form-${b.id}`}>
-      <p className="text-xs text-slate-300">{t("pu_addr_intro", lang)}</p>
+      <p className="text-xs text-slate-300">{t("pu_addr_intro2", lang)}</p>
       <VerifiedAddressForm value={loc} onChange={setLoc} needVenue={false} testid={`vs-pickup-addr-${b.id}`} />
       <UnverifiedNote show={loc.confirmed && !loc.verified} testid={`vs-pickup-unverified-${b.id}`} />
-      <div className="flex gap-2">
-        <div className="w-28 shrink-0">
-          <label className="text-[11px] text-slate-400">{t("pu_time", lang)}</label>
-          <Input data-testid={`vs-pickup-time-${b.id}`} type="time" value={time} onChange={(e) => setTime(e.target.value)} className="bg-white/5 border-white/10 h-9 mt-1" />
-        </div>
-        <div className="flex-1">
-          <label className="text-[11px] text-slate-400">{t("pu_note_label", lang)}</label>
-          <Input data-testid={`vs-pickup-note-${b.id}`} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("pu_note_ph", lang)} className="bg-white/5 border-white/10 h-9 mt-1" />
-        </div>
+      <div>
+        <label className="text-[11px] text-slate-400">{t("pu_note_label2", lang)}</label>
+        <Input data-testid={`vs-pickup-note-${b.id}`} value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder={t("arr_ph", lang)} className="bg-white/5 border-white/10 h-9 mt-1" />
+        <p className="text-[10px] text-slate-500 mt-0.5">{t("pu_note_hint2", lang)}</p>
       </div>
       <div className="flex gap-2">
         <Button data-testid={`vs-pickup-send-${b.id}`} size="sm" disabled={busy || !addressReady(loc, false)} onClick={send} className="bg-sky-600 hover:bg-sky-500 text-white border-0 h-9">
@@ -116,8 +110,8 @@ export default function VipPickupBlock({ b, who, onDone, onCancel }) {
             {st === "offered" ? <Hourglass size={13} /> : <Car size={13} />}
             {t(st === "offered" ? (who === "incoming" ? "pu_st_offered_vip" : "pu_st_offered") : `pu_st_${st}`, lang)}
           </div>
-          {addr && <div className="flex items-start gap-1.5 text-slate-300"><MapPin size={12} className="mt-0.5 shrink-0" /> {addr} · {t("pu_time", lang)} {pu.time}</div>}
-          {pu.note ? <div className="text-slate-400 italic">“{pu.note}”</div> : null}
+          {addr && <div className="flex items-start gap-1.5 text-slate-300"><MapPin size={12} className="mt-0.5 shrink-0" /> {addr}</div>}
+          {pu.note && (who === "incoming" || b.status === "confirmed") ? <div className="text-slate-300 flex items-start gap-1.5" data-testid={`vs-pickup-note-text-${b.id}`}><KeyRound size={12} className="mt-0.5 shrink-0 text-amber-300" />{pu.note}</div> : null}
         </div>
       )}
       {st === "offered" && active && pu.deadline && (
