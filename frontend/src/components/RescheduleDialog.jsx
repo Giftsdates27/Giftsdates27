@@ -7,7 +7,7 @@ import { CalendarClock, Clock } from "lucide-react";
 import { api } from "../lib/api";
 import { useApp } from "../context/AppContext";
 import { t } from "../lib/i18n";
-import { toKey, fromKey, minHm, dayWins, openDayKeys, bestDayKeys } from "../lib/availability";
+import { toKey, fromKey, minHm, dayWins, openDayKeys, bestDayKeys, SLOT } from "../lib/availability";
 import TimeChooser from "./TimeChooser";
 import AvailabilityOverview from "./AvailabilityOverview";
 
@@ -23,7 +23,7 @@ export const rescheduleErr = (d, lang) => {
 };
 
 /** Pick a new free day + start time from the invited person's calendar and send it as a proposal. */
-export default function RescheduleDialog({ open, onOpenChange, ownerId, itemId, url, onDone }) {
+export default function RescheduleDialog({ open, onOpenChange, ownerId, itemId, url, onDone, slot = SLOT }) {
   const { lang } = useApp();
   const [avail, setAvail] = useState({ available_days: [], busy_days: [] });
   const [day, setDay] = useState(null);
@@ -72,8 +72,9 @@ export default function RescheduleDialog({ open, onOpenChange, ownerId, itemId, 
         </div>
         <div>
           <label className="text-xs text-slate-400 flex items-center gap-1"><Clock size={12} /> {t("pick_start_time", lang)}{day ? ` · ${day}` : ""}</label>
+          {slot !== SLOT && <div className="mt-1 inline-flex text-[11px] px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-200" data-testid="reschedule-length">{t("rsch_length", lang).replace("{h}", +(slot / 60).toFixed(2))}</div>}
           {!day ? <div className="mt-2 text-xs text-slate-500">{t("pick_day", lang)}…</div>
-            : <TimeChooser key={day} day={day} wins={dayWins(avail, day)} taken={(avail.busy_slots || {})[day] || []} value={start} onChange={setStart} testid="reschedule-time" />}
+            : <TimeChooser key={day} day={day} wins={dayWins(avail, day)} taken={(avail.busy_slots || {})[day] || []} value={start} onChange={setStart} slot={slot} testid="reschedule-time" />}
         </div>
         <p className="text-[11px] text-amber-200/90 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2" data-testid="reschedule-note">{t("rsch_note", lang)}</p>
         <Button data-testid="reschedule-send-button" disabled={busy || !day || start == null} onClick={send} className="rose-btn text-white border-0 w-full h-11">{t("rsch_send", lang)}</Button>

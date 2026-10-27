@@ -255,6 +255,7 @@ export const VS_T = {
   dl_quick_sent: row("New time sent — the date stays on while they reply"),
   st_loading: row("Finding free times…"),
   tz_your_time: row("Your time"),
+  rsch_length: row("Same length as your booking: {h}h"),
   tz_their_time: row("{n}'s time"),
   st_counter: row("Or offer another free time instead:"),
   st_resched_quick: row("Nearest free times — tap to propose"),

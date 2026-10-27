@@ -340,7 +340,7 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
     <>
       <CancelPreviewDialog open={!!cancelFor} onOpenChange={(o) => !o && setCancelFor(null)} total={cancelFor?.total || 0} taxi={cancelFor?.taxi || 0}
         byRequester={!cancelFor?.isRecipient} onConfirm={() => { const b = cancelFor.b; setCancelFor(null); doCancel(b); }} />
-      {reschedFor && <RescheduleDialog open={!!reschedFor} onOpenChange={(o) => !o && setReschedFor(null)} ownerId={reschedFor.to_id} itemId={reschedFor.id} url={`/dates/reschedule/${reschedFor.id}`} onDone={load} />}
+      {reschedFor && <RescheduleDialog open={!!reschedFor} onOpenChange={(o) => !o && setReschedFor(null)} ownerId={reschedFor.to_id} itemId={reschedFor.id} url={`/dates/reschedule/${reschedFor.id}`} onDone={load} slot={reschedFor.duration_min || _bookingDur(reschedFor)} />}
       <DeclineReasonDialog open={!!declineFor} onClose={() => setDeclineFor(null)} onConfirm={(r) => respond(declineFor, false, null, r)} testid="booking-decline-dialog"
         onPropose={declineB ? () => setReschedFor(declineB) : undefined}
         proposeHint={declineB ? t("dl_propose_hint_n", lang).replace("{n}", declineB.coins) : null}
