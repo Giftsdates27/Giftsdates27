@@ -557,6 +557,7 @@ class LoginReq(BaseModel):
     password: str
 
 class ProfileUpdate(BaseModel):
+    timezone: Optional[str] = None
     name: Optional[str] = None
     age: Optional[int] = None
     birth_year: Optional[int] = None
@@ -1030,6 +1031,9 @@ async def me(user=Depends(get_current_user)):
 @api.patch("/auth/me")
 async def update_me(patch: ProfileUpdate, user=Depends(get_current_user)):
     upd = {k: v for k, v in patch.model_dump().items() if v is not None}
+    if "timezone" in upd:
+        try: ZoneInfo(upd["timezone"])
+        except Exception: upd.pop("timezone")
     if "genders" in upd:
         gs = [g for g in (upd["genders"] or []) if g in VALID_GENDERS]
         upd["genders"] = gs
@@ -2612,17 +2616,17 @@ def day_windows(u, day):
     w = u.get("availability_time")
     return [w] if w else None
 
-def fit_start(wins, start_min):
+def fit_start(wins, start_min, dur=DATE_SLOT_MINUTES):
     """Effective start minute (may be >=1440 for after-midnight) if a full date fits in one window, else None."""
     for w in wins:
         ws, we = _win_end_min(w)
         s = start_min + 24 * 60 if (we > 24 * 60 and start_min < ws) else start_min
-        if ws <= s and s + DATE_SLOT_MINUTES <= we: return s
+        if ws <= s and s + dur <= we: return s
     return None
 
 def wins_label(wins): return ", ".join(f"{w['from']}-{w['to']}" for w in wins)
 
-def free_starts(wins, taken):
+def free_starts(wins, taken, dur=DATE_SLOT_MINUTES):
     """All valid start minutes (15-min steps) that fit a window and avoid taken lock blocks."""
     def _lock(t):
         lf, lt = _hm_to_min(t["lock_from"]), _hm_to_min(t["lock_to"])
@@ -2632,8 +2636,8 @@ def free_starts(wins, taken):
     for w in wins:
         ws, we = _win_end_min(w)
         s = ws + (-ws % START_STEP)
-        while s + DATE_SLOT_MINUTES <= we:
-            if not any(lf < s + DATE_SLOT_MINUTES and s < lt for lf, lt in locks): out.append(s)
+        while s + dur <= we:
+            if not any(lf < s + dur and s < lt for lf, lt in locks): out.append(s)
             s += START_STEP
     return out
 
@@ -2952,9 +2956,9 @@ async def list_dates(user=Depends(get_current_user)):
         if b.get("vip"):
             _hide_own_address(b, b["status"] not in ("escrow", "cancelled", "declined"))
             b["extra_hour_price"] = vip_extra_price(await db.users.find_one({"id": b["to_id"]}, {"_id": 0, "vip.prices": 1}) or {})
-    names = {u["id"]: u.get("name") for u in await db.users.find({"id": {"$in": list({x["from_id"] for x in incoming} | {x["to_id"] for x in outgoing})}}, {"_id": 0, "id": 1, "name": 1}).to_list(500)}
-    for b in incoming: b.setdefault("from_name", names.get(b["from_id"]))
-    for b in outgoing: b.setdefault("to_name", names.get(b["to_id"]))
+    ppl = {u["id"]: u for u in await db.users.find({"id": {"$in": list({x["from_id"] for x in incoming} | {x["to_id"] for x in outgoing})}}, {"_id": 0, "id": 1, "name": 1, "timezone": 1}).to_list(500)}
+    for b in incoming: b.setdefault("from_name", (ppl.get(b["from_id"]) or {}).get("name")); b["other_tz"] = (ppl.get(b["from_id"]) or {}).get("timezone")
+    for b in outgoing: b.setdefault("to_name", (ppl.get(b["to_id"]) or {}).get("name")); b["other_tz"] = (ppl.get(b["to_id"]) or {}).get("timezone")
     return {"outgoing": outgoing, "incoming": incoming}
 
 @api.post("/dates/confirm")
@@ -3951,10 +3955,10 @@ async def _vs_extra_checks(vip_id, date, cs, ce):
         if cs < lt and lf < ce: raise HTTPException(409, "SLOT_TAKEN")
 
 async def _vs_requester_card(uid: str) -> dict:
-    u = await db.users.find_one({"id": uid}, {"_id": 0, "id": 1, "name": 1, "age": 1, "city": 1, "country": 1, "photos": 1})
+    u = await db.users.find_one({"id": uid}, {"_id": 0, "id": 1, "name": 1, "age": 1, "city": 1, "country": 1, "photos": 1, "timezone": 1})
     if not u:
         return {"id": uid, "name": "User", "photo": None}
-    return {"id": u["id"], "name": u.get("name") or "User", "age": u.get("age"),
+    return {"id": u["id"], "name": u.get("name") or "User", "age": u.get("age"), "tz": u.get("timezone"),
             "city": u.get("city"), "country": u.get("country"),
             "photo": (u.get("photos") or [None])[0]}
 
@@ -4532,9 +4536,9 @@ async def vs_my_requests(user=Depends(get_current_user)):
     raw = await db.vip_sched.find({"requester_id": user["id"]}, {"_id": 0}).sort([("date", 1), ("start", 1)]).to_list(500)
     out = []
     for b in raw:
-        vip = await db.users.find_one({"id": b["vip_id"]}, {"_id": 0, "id": 1, "name": 1, "photos": 1, "vip.prices": 1})
+        vip = await db.users.find_one({"id": b["vip_id"]}, {"_id": 0, "id": 1, "name": 1, "photos": 1, "vip.prices": 1, "timezone": 1})
         b["extra_hour_price"] = vip_extra_price(vip or {})
-        b["vip_card"] = {"id": b["vip_id"], "name": (vip or {}).get("name") or "VIP", "photo": ((vip or {}).get("photos") or [None])[0]}
+        b["vip_card"] = {"id": b["vip_id"], "name": (vip or {}).get("name") or "VIP", "photo": ((vip or {}).get("photos") or [None])[0], "tz": (vip or {}).get("timezone") or b.get("tz")}
         out.append(_hide_own_address(b, b["status"] in ("confirmed", "completed")))
     return {"requests": out}
 
@@ -5337,11 +5341,11 @@ async def _log_status(did, status, by):
     await _close_date_cards(did)
 
 async def _mini(uid):
-    u = await db.users.find_one({"id": uid}, {"_id": 0, "id": 1, "name": 1, "photos": 1, "age": 1, "city": 1, "country": 1})
+    u = await db.users.find_one({"id": uid}, {"_id": 0, "id": 1, "name": 1, "photos": 1, "age": 1, "city": 1, "country": 1, "timezone": 1})
     if not u: return None
     ph = u.get("photos") or []
     return {"id": u["id"], "name": u.get("name"), "age": u.get("age"), "city": u.get("city"),
-            "country": u.get("country"), "photo": ph[0] if ph else None}
+            "country": u.get("country"), "photo": ph[0] if ph else None, "tz": u.get("timezone")}
 
 BUSY_STATUSES = ["DATE_CONFIRMED", "DATE_COMPLETED_PENDING_VERIFICATION", "PHOTO_VERIFICATION_PENDING"]
 
@@ -5953,7 +5957,7 @@ async def _resched_check(item_id, owner_id, other_id, day, tm, start_dt, dur):
     sm = _hm_to_min(tm)
     wins = day_windows(owner, day)
     if wins is not None and not wins: raise HTTPException(400, "DAY_UNAVAILABLE")
-    if wins and fit_start(wins, sm) is None: raise HTTPException(400, f"TIME_UNAVAILABLE:{wins_label(wins)}")
+    if wins and fit_start(wins, sm, dur) is None: raise HTTPException(400, f"TIME_UNAVAILABLE:{wins_label(wins)}")
     await _assert_slot_free(owner, day, sm, start_dt, exclude=item_id, dur=dur)
     await _assert_slot_free(other, day, sm, start_dt, exclude=item_id, dur=dur, busy_only=True)
 
@@ -6015,10 +6019,11 @@ def _booking_dur(b): return _booking_end_min(b) - _booking_start_min(b)
 @api.post("/dates/reschedule/{bid}")
 async def booking_reschedule(bid: str, req: RescheduleReq, user=Depends(get_current_user)):
     b = await _booking_party(bid, user["id"])
-    if b["status"] not in RESCHEDULABLE_BOOKING or b.get("vip") or _report_open(b): raise HTTPException(400, "CANNOT_RESCHEDULE")
+    if b["status"] not in RESCHEDULABLE_BOOKING or _report_open(b): raise HTTPException(400, "CANNOT_RESCHEDULE")
     if _resched_started(_pdt(b["scheduled_at"])): raise HTTPException(400, "DATE_STARTED")
     await _resched_check(bid, b["to_id"], b["from_id"], req.local_day[:10], req.local_time, _pdt(req.scheduled_start), _booking_dur(b))
     prop = _proposal(req, user["id"])
+    if b.get("vip"): prop["scheduled_start"] = f"{prop['local_day']}T{prop['local_time']}:00"  # VIP price-list dates keep the VIP's wall-clock time
     await db.date_bookings.update_one({"id": bid}, {"$set": {"reschedule_proposal": prop}})
     other = b["to_id"] if b["from_id"] == user["id"] else b["from_id"]
     await notify(other, "date_rescheduled", "New date time proposed 🔁",
@@ -6038,7 +6043,7 @@ async def booking_reschedule_answer(bid: str, answer: str, user=Depends(get_curr
         await _resched_check(bid, b["to_id"], b["from_id"], p["local_day"], p["local_time"], start, dur)
         sm = _hm_to_min(p["local_time"])
         await db.date_bookings.update_one({"id": bid}, {"$set": {
-            "scheduled_at": _iso(start), "local_day": p["local_day"], "local_time": p["local_time"],
+            "scheduled_at": p["scheduled_start"] if b.get("vip") else _iso(start), "local_day": p["local_day"], "local_time": p["local_time"],
             "slot_from": _min_to_hm(sm), "slot_to": _min_to_hm(sm + dur), "reminders": {}, "rescheduled_at": _iso()},
             "$unset": {"reschedule_proposal": ""}})
         await notify(other, "date_rescheduled", "New time accepted ✅", f"{user['name']} accepted the new time: {_fmt_when(p['local_day'], p['local_time'])}.",
@@ -6065,7 +6070,7 @@ async def _regular_suggest(item_id, owner_id, other_id, local_day, local_time, s
         wins = day_windows(owner, day)
         if wins is None: wins = [{"from": "10:00", "to": "22:00"}]
         last = None
-        for m in free_starts(wins, taken.get(day, [])) if wins else []:
+        for m in free_starts(wins, taken.get(day, []), dur) if wins else []:
             if last is not None and m < last + dur + DATE_BUFFER: continue
             tm = _min_to_hm(m % 1440)
             if day == local_day[:10] and tm == local_time: continue
@@ -6091,8 +6096,11 @@ async def invite_suggest(did: str, user=Depends(get_current_user)):
 async def booking_suggest(bid: str, user=Depends(get_current_user)):
     b = await _booking_party(bid, user["id"])
     st = _pdt(b["scheduled_at"])
-    return {"suggestions": await _regular_suggest(bid, b["to_id"], b["from_id"], b.get("local_day") or b["scheduled_at"][:10],
-                                                   b.get("local_time") or st.strftime("%H:%M"), b["scheduled_at"], _booking_dur(b))}
+    out = await _regular_suggest(bid, b["to_id"], b["from_id"], b.get("local_day") or b["scheduled_at"][:10],
+                                 b.get("local_time") or st.strftime("%H:%M"), b["scheduled_at"], _booking_dur(b))
+    if b.get("vip"):
+        for x in out: x["scheduled_start"] = f"{x['date']}T{x['start']}:00"
+    return {"suggestions": out}
 
 async def _mirror_to_main_chat(from_id, to_id, text, did):
     """Copy a date-chat message into the regular conversation between the two people."""

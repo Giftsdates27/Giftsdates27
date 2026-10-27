@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { api } from "../lib/api";
+import { myTz } from "../lib/tz";
 import { LANGUAGES, missingStrings, detectLanguage } from "../lib/i18n";
 import { setAutoLanguage, prefetch } from "../lib/autoTranslate";
 
@@ -53,6 +54,8 @@ export function AppProvider({ children }) {
       const chosen = localStorage.getItem("gd_lang");
       if (chosen && data.language !== chosen) api.patch("/auth/me", { language: chosen }).catch(() => {});
       else if (!chosen && data.language && data.language !== lang) { setLang(data.language); localStorage.setItem("gd_lang", data.language); }
+      const tz = myTz();
+      if (tz && data.timezone !== tz) api.patch("/auth/me", { timezone: tz }).catch(() => {});
       refreshSpin();
     } catch { localStorage.removeItem("gd_token"); setUser(null); setSpinEligible(false); }
   }, [lang, refreshSpin]);

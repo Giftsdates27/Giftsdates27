@@ -9,6 +9,8 @@ import { toast } from "sonner";
 import { CalendarHeart, Camera, Clock, Check, X, Car, Info, Coins, Flag, CalendarClock } from "lucide-react";
 import RescheduleDialog, { rescheduleErr } from "./RescheduleDialog";
 import RescheduleProposalBar from "./RescheduleProposalBar";
+import TzLines, { tzLabel } from "./TzLines";
+import { myTz, zonedInstant } from "../lib/tz";
 import DateReportForm, { DateStartedNote, ReportReplyBlock, ReportStatusNote } from "./DateReportForm";
 import { MapsLink } from "./AddressPicker";
 import VerifiedAddressForm, { addrHintKey, addressReady, addrPayload, addrErrKey, UnverifiedNote } from "./VerifiedAddressForm";
@@ -24,6 +26,21 @@ import { matchesFilter, tabOf, bookingStatus } from "../lib/dateFilters";
 
 const vipEnd = (b) => new Date(new Date(b.scheduled_at).getTime() + (b.duration_min || 150) * 60000);
 const hm = (d) => d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+// VIP price-list dates are stored in the VIP's wall clock; regular ones as an exact instant shown in the viewer's clock.
+function BookingTz({ b, inc, lang }) {
+  const other = { label: tzLabel(lang, inc ? b.from_name : b.to_name), tz: b.other_tz };
+  const dur = b.duration_min || _bookingDur(b);
+  if (b.vip) {
+    const vipTz = inc ? myTz() : b.other_tz;
+    const day = b.local_day || b.scheduled_at.slice(0, 10), hmS = b.slot_from || b.scheduled_at.slice(11, 16);
+    const s = zonedInstant(day, hmS, vipTz);
+    return <TzLines start={s} end={new Date(s.getTime() + dur * 60000)} shownTz={vipTz} people={[{ label: tzLabel(lang), tz: myTz() }, other]} testid={`date-tz-${b.id}`} />;
+  }
+  const s = new Date(b.scheduled_at);
+  return <TzLines start={s} end={new Date(s.getTime() + dur * 60000)} shownTz={myTz()} people={[other]} testid={`date-tz-${b.id}`} />;
+}
+const _bookingDur = (b) => { if (!b.slot_from || !b.slot_to) return 150; const m = (x) => +x.slice(0, 2) * 60 + +x.slice(3, 5); return ((m(b.slot_to) - m(b.slot_from)) + 1440) % 1440 || 150; };
+
 function VipTimeRange({ b, lang }) {
   const s = new Date(b.scheduled_at), e = vipEnd(b);
   return <span data-testid={`date-time-range-${b.id}`}>{s.toLocaleDateString()} · {t("bk_start", lang)} {hm(s)} → {t("bk_finish", lang)} {hm(e)}{e.toDateString() !== s.toDateString() ? " (+1)" : ""}</span>;
@@ -158,6 +175,7 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
       <div className="flex-1">
         <div className="flex items-center gap-2 mb-1"><CalendarHeart size={14} className="text-rose-400"/><span className="font-serif-luxe text-lg">{b.venue}</span></div>
         <div className="text-xs text-slate-400 flex items-center gap-2"><Clock size={11}/> {b.vip ? <VipTimeRange b={b} lang={lang} /> : new Date(b.scheduled_at).toLocaleString()} · {b.city}</div>
+        <BookingTz b={b} inc={isIncoming} lang={lang} />
         {(b.address || b.lat || b.postal_code) && <div className="text-xs text-slate-400 mt-0.5">{[b.address, b.postal_code, b.country].filter(Boolean).join(" · ")} <MapsLink loc={b} testid={`date-maps-link-${b.id}`} /><UnverifiedNote show={b.unverified} testid={`booking-unverified-${b.id}`} /></div>}
         {b.meet?.address && <div className="text-xs text-emerald-300 mt-0.5" data-testid={`meet-location-${b.id}`}>📍 {t("meet_location", lang)}: {[b.meet.address, b.meet.postal_code, b.meet.country].filter(Boolean).join(" · ")} <MapsLink loc={{ ...b.meet, venue: b.venue }} testid={`meet-maps-link-${b.id}`} /><UnverifiedNote show={b.meet?.unverified} testid={`meet-unverified-${b.id}`} /></div>}
         {b.status === "declined" && <DeclineNote reason={b.decline_reason} testid={`booking-decline-reason-${b.id}`} />}
@@ -294,7 +312,7 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
             </div>
           );
         })()}
-        {!b.vip && !started && !underReview && !b.reschedule_proposal && ["escrow", "accepted", "confirmed"].includes(b.status) && (
+        {!started && !underReview && !b.reschedule_proposal && ["escrow", "accepted", "confirmed"].includes(b.status) && (
           <Button data-testid={`date-reschedule-btn-${b.id}`} disabled={busyId===b.id} onClick={() => setReschedFor(b)} variant="outline" className="bg-amber-500/10 border-amber-500/40 text-amber-300 hover:bg-amber-500/20"><CalendarClock size={14} className="me-1"/> {t("rsch_btn", lang)}</Button>
         )}
         {underReview && <span className="text-[11px] px-2 py-1 rounded-full border border-rose-500/40 bg-rose-500/10 text-rose-200 self-center" data-testid={`date-reported-${b.id}`}>{t("rp_under_review", lang)}</span>}
@@ -323,9 +341,9 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
         byRequester={!cancelFor?.isRecipient} onConfirm={() => { const b = cancelFor.b; setCancelFor(null); doCancel(b); }} />
       {reschedFor && <RescheduleDialog open={!!reschedFor} onOpenChange={(o) => !o && setReschedFor(null)} ownerId={reschedFor.to_id} itemId={reschedFor.id} url={`/dates/reschedule/${reschedFor.id}`} onDone={load} />}
       <DeclineReasonDialog open={!!declineFor} onClose={() => setDeclineFor(null)} onConfirm={(r) => respond(declineFor, false, null, r)} testid="booking-decline-dialog"
-        onPropose={declineB && !declineB.vip ? () => setReschedFor(declineB) : undefined}
+        onPropose={declineB ? () => setReschedFor(declineB) : undefined}
         proposeHint={declineB ? t("dl_propose_hint_n", lang).replace("{n}", declineB.coins) : null}
-        suggestUrl={declineB && !declineB.vip ? `/dates/suggest/${declineFor}` : null}
+        suggestUrl={declineB ? `/dates/suggest/${declineFor}` : null}
         onPickSuggestion={async (s) => {
           try { await api.post(`/dates/reschedule/${declineFor}`, { scheduled_start: s.scheduled_start, local_day: s.date, local_time: s.start }); toast.success(t("dl_quick_sent", lang)); await load(); }
           catch (e) { toast.error(rescheduleErr(e.response?.data?.detail, lang)); throw e; }

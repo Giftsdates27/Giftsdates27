@@ -254,6 +254,8 @@ export const VS_T = {
   dl_quick_times: row("Nearest free times — tap to send"),
   dl_quick_sent: row("New time sent — the date stays on while they reply"),
   st_loading: row("Finding free times…"),
+  tz_your_time: row("Your time"),
+  tz_their_time: row("{n}'s time"),
   st_counter: row("Or offer another free time instead:"),
   st_resched_quick: row("Nearest free times — tap to propose"),
   dl_propose_hint: row("Can't make this time? Offer another free time from your availability calendar instead — keep the date and avoid losing your coins."),

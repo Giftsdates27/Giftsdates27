@@ -23,6 +23,8 @@ import DatesToday from "../components/DatesToday";
 import DatesEarnings from "../components/DatesEarnings";
 import CancelPreviewDialog from "../components/CancelPreviewDialog";
 import RescheduleDialog, { rescheduleErr } from "../components/RescheduleDialog";
+import TzLines, { tzLabel } from "../components/TzLines";
+import { myTz } from "../lib/tz";
 import RescheduleProposalBar from "../components/RescheduleProposalBar";
 
 const RESCHED_STATUSES = ["INVITATION_SENT", "DATE_ACTIVITY_SELECTED", "LOCATION_PROPOSED", "TAXI_REQUESTED", "PICKUP_ADDRESS_PENDING", "PICKUP_ADDRESS_SELECTED", "DATE_CONFIRMED"];
@@ -212,6 +214,8 @@ function DateCard({ d, reload }) {
           {d.location?.venue && <div className="text-xs text-slate-400 mt-1"><MapPin size={12} className="inline me-1" />{[d.location.venue, d.location.address, d.location.city].filter(Boolean).join(", ")} <MapsLink loc={d.location} testid={`date-maps-${d.id}`} /><UnverifiedNote show={d.location?.unverified} testid={`date-loc-unverified-${d.id}`} /></div>}
           {!isInv && (d.location?.scheduled_start || d.proposed_start) ? <DateTimeRange id={d.id} start={d.location?.scheduled_start || d.proposed_start} />
             : d.location?.scheduled_start && <div className="text-xs text-slate-400"><Clock size={12} className="inline me-1" />{new Date(d.location.scheduled_start).toLocaleString()} (3h)</div>}
+          {(d.location?.scheduled_start || d.proposed_start) && (() => { const s = new Date(d.location?.scheduled_start || d.proposed_start);
+            return <TzLines start={s} end={new Date(s.getTime() + 150 * 60000)} shownTz={myTz()} people={[{ label: tzLabel(lang, d.other?.name), tz: d.other?.tz }]} testid={`date-tz-${d.id}`} />; })()}
           {d.transportation?.status && <div className="text-xs text-sky-300 mt-0.5"><Car size={12} className="inline me-1" />{d.transportation.type}: {d.transportation.status}{d.transportation.taxi_amount ? ` · 🪙${d.transportation.taxi_amount}` : ""}{d.transportation.pickup_address ? ` · ${d.transportation.pickup_address}` : ""}<UnverifiedNote show={d.transportation?.pickup_unverified} testid={`date-pickup-unverified-${d.id}`} /></div>}
           <div className="text-xs text-amber-300/90 mt-0.5"><Coins size={12} className="inline me-1" />🪙 {d.total_hold || d.coins}{d.gift ? ` + ${tr("id_gift")} ${d.gift.icon || ""}` : ""}</div>
           {reportOpen && !d.report && <div className="text-[11px] mt-1"><Countdown to={w.report_close} label={tr("id_report_closes")} /></div>}

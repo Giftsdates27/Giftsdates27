@@ -9,6 +9,8 @@ import VipAvailabilityEditor from "../components/VipAvailabilityEditor";
 import VipDateBookModal from "../components/VipDateBookModal";
 import CancelLossNote from "../components/CancelLossNote";
 import SuggestedTimes from "../components/SuggestedTimes";
+import TzLines, { tzLabel } from "../components/TzLines";
+import { myTz, zonedInstant } from "../lib/tz";
 import AddToCalendar from "../components/AddToCalendar";
 import CancelPreviewDialog from "../components/CancelPreviewDialog";
 import DirectionsButton from "../components/DirectionsButton";
@@ -153,6 +155,8 @@ function BookingCard({ b, who, onConfirm, onDecline, onCancel, onReschedule, onR
             <Clock size={12} /> <span data-testid={`vs-booking-time-${b.id}`}>{t("bk_start", lang)} {b.start} → {t("bk_finish", lang)} {b.end}{end.getDate() !== start.getDate() ? " (+1)" : ""}</span> <span className="text-slate-600">·</span> {b.tz}
             {live && <span className="ms-1 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300" data-testid={`vs-live-${b.id}`}>{t("ext_in_progress", lang)}</span>}
           </div>
+          {(() => { const s = zonedInstant(b.date, b.start, b.tz), e = new Date(s.getTime() + (end - start));
+            return <TzLines start={s} end={e} shownTz={b.tz} people={[{ label: tzLabel(lang), tz: myTz() }, { label: tzLabel(lang, card?.name), tz: who === "incoming" ? b.requester?.tz : b.vip_card?.tz }]} testid={`vs-tz-${b.id}`} />; })()}
           <BookingPlace b={b} lang={lang} who={who} />
           {b.activity ? <div className="text-xs text-slate-300 mt-0.5 truncate">{b.activity}</div> : null}
         </div>
