@@ -384,7 +384,7 @@ export default function InviteDates() {
   const [booked, setBooked] = useState(null);
   const [sort, setSort] = useSort("gd_sort_dates");
   const urlTab = DATE_TABS.includes(params.get("tab")) ? params.get("tab") : null;
-  const [tab, setTabState] = useState(urlTab || "requests");
+  const [tab, setTabState] = useState(urlTab || "confirmed");
   const setTab = (k) => { setTabState(k); setParams({ tab: k }, { replace: true }); };
   const inv = data ? [...data.incoming.map(d => ({ d, inc: true })), ...data.outgoing.map(d => ({ d, inc: false }))] : [];
   const counts = countByTab([...inv.map(x => ({ status: x.d.status, inc: x.inc })), ...(booked || [])]);
@@ -392,7 +392,7 @@ export default function InviteDates() {
   useEffect(() => {
     if (picked.current || !data || !booked) return;
     picked.current = true;
-    if (!counts.requests) { const first = DATE_TABS.find(k => counts[k]); if (first) setTabState(first); }
+    if (!counts.confirmed) { const first = DATE_TABS.find(k => counts[k]); if (first) setTabState(first); }
   }, [data, booked]); // eslint-disable-line
   const nothing = data && booked && inv.length + booked.length === 0;
   const shown = sortItems(inv.filter(x => tabOf(x.d.status, x.inc) === tab)

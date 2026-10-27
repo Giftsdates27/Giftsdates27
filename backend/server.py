@@ -2979,6 +2979,7 @@ async def list_dates(user=Depends(get_current_user)):
     for b in outgoing:
         if b.get("vip"):
             _hide_own_address(b, b["status"] not in ("escrow", "cancelled", "declined"))
+            await _attach_arrival_note(b, b["to_id"], b["status"] in ("accepted", "confirmed"))
             b["extra_hour_price"] = vip_extra_price(await db.users.find_one({"id": b["to_id"]}, {"_id": 0, "vip.prices": 1}) or {})
     ppl = {u["id"]: u for u in await db.users.find({"id": {"$in": list({x["from_id"] for x in incoming} | {x["to_id"] for x in outgoing})}}, {"_id": 0, "id": 1, "name": 1, "timezone": 1}).to_list(500)}
     for b in incoming: b.setdefault("from_name", (ppl.get(b["from_id"]) or {}).get("name")); b["other_tz"] = (ppl.get(b["from_id"]) or {}).get("timezone")
@@ -3876,6 +3877,7 @@ LOC_KEYS = ("address", "city", "postal_code", "country", "lat", "lng", "unverifi
 
 class VipOwnPlaceReq(BaseModel):
     address_confirmed: bool = False
+    arrival_note: str = ""
     address: str = ""
     city: str = ""
     postal_code: str = ""
@@ -3891,7 +3893,7 @@ async def vip_get_own_place(user=Depends(get_current_user)):
 async def vip_set_own_place(req: VipOwnPlaceReq, user=Depends(get_current_user)):
     geo = await _geocode_address(req.address, req.city, req.postal_code, req.country, venue=None, confirmed=req.address_confirmed)
     loc = {k: (v.strip() if isinstance(v, str) else v) for k, v in req.model_dump().items() if k != "address_confirmed"}
-    loc.update({"lat": geo["lat"], "lng": geo["lng"], "unverified": geo["unverified"]})
+    loc.update({"lat": geo["lat"], "lng": geo["lng"], "unverified": geo["unverified"], "arrival_note": (req.arrival_note or "").strip()[:300]})
     await db.users.update_one({"id": user["id"]}, {"$set": {"vip_own_place": loc}})
     return loc
 
@@ -3908,6 +3910,12 @@ def _vs_places(target: dict) -> list:
     if not places:
         places = (["own"] if (target.get("vip_own_place") or {}).get("address") else []) + ["your", "other"]
     return places
+
+async def _attach_arrival_note(b: dict, vip_id: str, show: bool):
+    """VIP's arrival instructions (door code, entrance…) — only for confirmed dates at the VIP's own place."""
+    if b.get("place") == "own" and show:
+        op = ((await db.users.find_one({"id": vip_id}, {"_id": 0, "vip_own_place.arrival_note": 1})) or {}).get("vip_own_place") or {}
+        if op.get("arrival_note"): b["arrival_note"] = op["arrival_note"]
 
 def _hide_own_address(b: dict, visible: bool) -> dict:
     """The VIP's home address is shown to the client only once the date is confirmed."""
@@ -4619,6 +4627,7 @@ async def vs_my_requests(user=Depends(get_current_user)):
         vip = await db.users.find_one({"id": b["vip_id"]}, {"_id": 0, "id": 1, "name": 1, "photos": 1, "vip.prices": 1, "timezone": 1})
         b["extra_hour_price"] = vip_extra_price(vip or {})
         b["vip_card"] = {"id": b["vip_id"], "name": (vip or {}).get("name") or "VIP", "photo": ((vip or {}).get("photos") or [None])[0], "tz": (vip or {}).get("timezone") or b.get("tz")}
+        await _attach_arrival_note(b, b["vip_id"], b["status"] == "confirmed")
         out.append(_hide_own_address(b, b["status"] in ("confirmed", "completed")))
     return {"requests": out}
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Crown, Plus, X, Sparkles, Lock, MapPin, Loader2, CalendarClock, ArrowRight } from "lucide-react";
+import { Crown, Plus, X, Sparkles, Lock, MapPin, Loader2, CalendarClock, ArrowRight, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { api, fileUrl } from "../lib/api";
@@ -195,7 +195,7 @@ export default function VipEditor() {
       };
       if (places.includes("own")) {
         if (!addressReady(ownPlace, false)) throw { response: { data: { detail: addressComplete(ownPlace, false) ? "CHECK_FIRST" : "ADDRESS_FIELDS_REQUIRED" } } };
-        await api.put("/vip/own-place", addrPayload(ownPlace));
+        await api.put("/vip/own-place", { ...addrPayload(ownPlace), arrival_note: ownPlace.arrival_note || "" });
       }
       await api.put("/vip/profile", payload);
       await refreshUser();
@@ -412,6 +412,13 @@ export default function VipEditor() {
             <p className="text-[11px] text-slate-400">{t("own_addr_note", lang)}</p>
             <VerifiedAddressForm value={ownPlace} onChange={setOwnPlace} needVenue={false} testid="vip-own-place-addr" />
             <UnverifiedNote show={ownPlace.confirmed && !ownPlace.verified} testid="vip-own-place-unverified" />
+            <div>
+              <label className="text-[11px] text-slate-400 flex items-center gap-1"><KeyRound size={11} className="text-amber-300" />{t("arr_label", lang)}</label>
+              <Textarea data-testid="vip-own-place-arrival-note" value={ownPlace.arrival_note || ""} maxLength={300} rows={2}
+                onChange={(e) => setOwnPlace({ ...ownPlace, arrival_note: e.target.value })} placeholder={t("arr_ph", lang)}
+                className="mt-1 bg-white/5 border-white/10 text-sm" />
+              <p className="text-[10px] text-slate-500 mt-0.5">{t("arr_hint", lang)}</p>
+            </div>
             {!ownPlace.address && <p className="text-[11px] text-amber-300" data-testid="vip-own-place-missing">{t("own_addr_missing", lang)}</p>}
           </div>
         )}

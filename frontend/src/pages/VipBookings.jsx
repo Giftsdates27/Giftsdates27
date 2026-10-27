@@ -8,6 +8,7 @@ import { useApp } from "../context/AppContext";
 import VipAvailabilityEditor from "../components/VipAvailabilityEditor";
 import VipDateBookModal from "../components/VipDateBookModal";
 import CancelLossNote from "../components/CancelLossNote";
+import ArrivalNote from "../components/ArrivalNote";
 import SuggestedTimes from "../components/SuggestedTimes";
 import TzLines, { tzLabel } from "../components/TzLines";
 import { myTz, zonedInstant } from "../lib/tz";
@@ -170,6 +171,7 @@ function BookingCard({ b, who, onConfirm, onDecline, onCancel, onReschedule, onR
       <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
         {b.status === "confirmed" && <AddToCalendar id={b.id} title={`GiftsDates VIP: ${b.activity || card?.name || "Date"}`} place={[b.location?.address, b.location?.city].filter(Boolean).join(", ") || b.venue || b.activity} start={start} end={end} link="/vip-bookings" />}
         {b.status === "confirmed" && b.place !== "own" && b.location?.address && <DirectionsButton loc={b.location} testid={`vs-directions-${b.id}`} />}
+        {who === "outgoing" && b.status === "confirmed" && <ArrivalNote note={b.arrival_note} testid={`vs-arrival-note-${b.id}`} />}
         <UnverifiedNote show={b.location?.unverified} testid={`vs-unverified-${b.id}`} />
         {who === "outgoing" && checkInOpen && !b.arrived_at && <ArrivedButton b={b} onDone={onReload} />}
         {lateOpen && <RunningLateButton b={b} onDone={onReload} />}
@@ -223,7 +225,7 @@ export default function VipBookings() {
   const nav = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTab = [...DATE_TABS, "availability"].includes(searchParams.get("tab")) ? searchParams.get("tab") : null;
-  const [tab, setTabState] = useState(urlTab || "requests");
+  const [tab, setTabState] = useState(urlTab || "confirmed");
   const setTab = (k) => { setTabState(k); setSearchParams({ tab: k }, { replace: true }); };
   const [booked, setBooked] = useState(null);
   const [sort, setSort] = useSort("gd_sort_vip");
@@ -252,7 +254,7 @@ export default function VipBookings() {
     picked.current = true;
     const its = [...[...(sched?.pending || []), ...(sched?.confirmed || []), ...(sched?.past || [])].map((b) => ({ status: vsStatus(b), inc: true })), ...mine.map((b) => ({ status: vsStatus(b), inc: false })), ...booked];
     const c = countByTab(its);
-    if (!c.requests) { const first = DATE_TABS.find((k) => c[k]); if (first) setTabState(first); }
+    if (!c.confirmed) { const first = DATE_TABS.find((k) => c[k]); if (first) setTabState(first); }
   }, [loading, booked]); // eslint-disable-line
 
   const act = async (fn, id) => {
