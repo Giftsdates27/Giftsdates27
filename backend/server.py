@@ -4350,6 +4350,15 @@ PICKUP_ADDR_HOURS = 12
 
 async def _vs_pickup_expire(now):
     """VIP never added the pick-up location before the deadline → the date is cancelled on the VIP's side (client fully refunded)."""
+    # 2 hours before the deadline: one reminder to the VIP (in-app + email)
+    async for b in db.vip_sched.find({"status": {"$in": ["pending", "confirmed"]}, "pickup.status": "offered", "pickup.reminded": {"$ne": True},
+                                      "pickup.deadline": {"$gt": now.isoformat(), "$lte": (now + timedelta(hours=2)).isoformat()}}, {"_id": 0}):
+        await db.vip_sched.update_one({"id": b["id"]}, {"$set": {"pickup.reminded": True}})
+        dl = _pdt(b["pickup"]["deadline"])
+        mins = max(1, int((dl - now).total_seconds() // 60)) if dl else 120
+        await notify(b["vip_id"], "vs_pickup", "Pick-up location still missing ⏰",
+                     f"Add where you'd like to be picked up for your date on {b['date']} · {b['start']} within {mins // 60}h {mins % 60:02d}min — otherwise the date is cancelled automatically and the client gets all coins back.",
+                     {"booking_id": b["id"]}, email=True, link=f"{PUBLIC_APP_URL}/vip-bookings", cta="Add pick-up location")
     async for b in db.vip_sched.find({"status": {"$in": ["pending", "confirmed"]}, "pickup.status": "offered", "pickup.deadline": {"$lte": now.isoformat()}}, {"_id": 0}):
         vip = await db.users.find_one({"id": b["vip_id"]}, {"_id": 0, "id": 1, "name": 1})
         if not vip: continue
