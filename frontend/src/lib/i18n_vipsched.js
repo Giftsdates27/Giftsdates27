@@ -256,6 +256,7 @@ export const VS_T = {
   st_loading: row("Finding free times…"),
   tz_your_time: row("Your time"),
   rsch_length: row("Same length as your booking: {h}h"),
+  cp_resched_hint: row("Can't make it? Move the date to another free time instead of cancelling — no one loses coins (you'd lose 🪙 {n} by cancelling)."),
   vs_lock_note: row("Each booking automatically locks 15 min before and 15 min after it. Locked times can't be booked by anyone."),
   vs_lock_hint: row("Booking + 15 min buffer before and after"),
   vs_lock_booked: row("booked"),

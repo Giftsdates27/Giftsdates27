@@ -337,7 +337,12 @@ function DateCard({ d, reload }) {
         {d.reschedule_proposal && RESCHED_STATUSES.includes(d.status) && <RescheduleProposalBar id={d.id} p={d.reschedule_proposal} mine={d.reschedule_proposal.mine} otherName={d.other?.name} url={`/invites/${d.id}/reschedule`} onDone={reload} />}
         {cancelOpen && (() => { const c = cancelInfo(); return (
           <CancelPreviewDialog open={cancelOpen} onOpenChange={setCancelOpen} total={c.total} taxi={c.taxi} split={c.split} byRequester={isInv}
-            onConfirm={() => { setCancelOpen(false); act(() => post("/cancel")); }} />
+            onConfirm={() => { setCancelOpen(false); act(() => post("/cancel")); }}
+            onPropose={canResched ? () => setReschedOpen(true) : undefined} suggestUrl={canResched ? `/invites/${d.id}/suggest` : null}
+            onPickSuggestion={async (s) => {
+              try { await post("/reschedule", { scheduled_start: s.scheduled_start, local_day: s.date, local_time: s.start }); toast.success(tr("dl_quick_sent")); await reload(); }
+              catch (e) { toast.error(rescheduleErr(e.response?.data?.detail, lang)); throw e; }
+            }} />
         ); })()}
         {started && !TERMINAL.includes(d.status) && !d.report && <DateStartedNote id={d.id} />}
         {d.report && <span className="text-[11px] px-2 py-1 rounded-full border border-rose-500/40 bg-rose-500/10 text-rose-200 self-center" data-testid={`date-reported-${d.id}`}>{tr("rp_under_review")}</span>}

@@ -86,6 +86,7 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
   const [cancelFor, setCancelFor] = useState(null);
   const declineB = declineFor ? all.find(x => x.b.id === declineFor)?.b : null;
   const cancel = (b, isRecipient) => { const taxi = b.taxi?.status === "sent" ? (b.taxi?.coins || 0) : 0; setCancelFor({ b, isRecipient, taxi, total: b.coins + taxi }); };
+  const canReschedB = (b) => !!b && ["escrow", "accepted", "confirmed"].includes(b.status) && !b.reschedule_proposal && !(b.report && (b.report.status || "open") === "open") && !timing(b).started;
   const doCancel = async (b) => {
     setBusyId(b.id);
     try { const { data } = await api.post(`/dates/cancel/${b.id}`); await refreshUser(); await load(); toast.success(t("date_cancelled_partial", lang).replace("{r}", data.refund)); }
@@ -339,7 +340,13 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
   return (
     <>
       <CancelPreviewDialog open={!!cancelFor} onOpenChange={(o) => !o && setCancelFor(null)} total={cancelFor?.total || 0} taxi={cancelFor?.taxi || 0}
-        byRequester={!cancelFor?.isRecipient} onConfirm={() => { const b = cancelFor.b; setCancelFor(null); doCancel(b); }} />
+        byRequester={!cancelFor?.isRecipient} onConfirm={() => { const b = cancelFor.b; setCancelFor(null); doCancel(b); }}
+        onPropose={canReschedB(cancelFor?.b) ? () => setReschedFor(cancelFor.b) : undefined}
+        suggestUrl={canReschedB(cancelFor?.b) ? `/dates/suggest/${cancelFor.b.id}` : null}
+        onPickSuggestion={async (s) => {
+          try { await api.post(`/dates/reschedule/${cancelFor.b.id}`, { scheduled_start: s.scheduled_start, local_day: s.date, local_time: s.start }); toast.success(t("dl_quick_sent", lang)); await load(); }
+          catch (e) { toast.error(rescheduleErr(e.response?.data?.detail, lang)); throw e; }
+        }} />
       {reschedFor && <RescheduleDialog open={!!reschedFor} onOpenChange={(o) => !o && setReschedFor(null)} ownerId={reschedFor.to_id} itemId={reschedFor.id} url={`/dates/reschedule/${reschedFor.id}`} onDone={load} slot={reschedFor.duration_min || _bookingDur(reschedFor)} />}
       <DeclineReasonDialog open={!!declineFor} onClose={() => setDeclineFor(null)} onConfirm={(r) => respond(declineFor, false, null, r)} testid="booking-decline-dialog"
         onPropose={declineB ? () => setReschedFor(declineB) : undefined}

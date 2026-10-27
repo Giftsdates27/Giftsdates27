@@ -3808,6 +3808,11 @@ async def vip_book(req: DateBookingReq, user=Depends(get_current_user)):
     recipient_id = target["id"]
     if recipient_id == user["id"]:
         raise HTTPException(400, "CANNOT_BOOK_SELF")
+    if req.scheduled_at and len(req.scheduled_at) >= 16:
+        day, sm = req.scheduled_at[:10], _hm_to_min(req.scheduled_at[11:16])
+        start_utc = _wall_utc(day, req.scheduled_at[11:16], target.get("timezone") or "UTC")
+        await _assert_slot_free(target, day, sm, start_utc, dur=dur_min or DATE_SLOT_MINUTES)
+        await _assert_slot_free(user, day, sm, start_utc, dur=dur_min or DATE_SLOT_MINUTES, busy_only=True)
     now = datetime.now(timezone.utc).isoformat()
     bid = str(uuid.uuid4())
     doc = {"id": bid, "from_id": user["id"], "to_id": recipient_id, "venue": req.venue or "VIP", "city": req.city or "-",

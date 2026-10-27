@@ -1,5 +1,8 @@
 import React from "react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
+import { Button } from "./ui/button";
+import { CalendarClock } from "lucide-react";
+import SuggestedTimes from "./SuggestedTimes";
 import { useApp } from "../context/AppContext";
 import { t } from "../lib/i18n";
 
@@ -20,9 +23,10 @@ const Row = ({ label, value, strong, testid }) => (
   </div>
 );
 
-export default function CancelPreviewDialog({ open, onOpenChange, total = 0, taxi = 0, byRequester, onConfirm, split }) {
+export default function CancelPreviewDialog({ open, onOpenChange, total = 0, taxi = 0, byRequester, onConfirm, split, suggestUrl, onPickSuggestion, onPropose }) {
   const { lang } = useApp();
   const { refund, comp, fee } = split || cancelSplit(total, byRequester, taxi);
+  const lose = byRequester ? comp + fee : total - taxi;
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent className="bg-[#161320] border-white/10 text-white max-w-sm" data-testid="cancel-preview-dialog">
@@ -39,6 +43,15 @@ export default function CancelPreviewDialog({ open, onOpenChange, total = 0, tax
           {byRequester && <Row label={t("cp_other_gets", lang)} value={comp} testid="cancel-preview-comp" />}
           {byRequester && <Row label={t("cp_fee", lang)} value={fee} testid="cancel-preview-fee" />}
         </div>
+        {onPropose && (
+          <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 space-y-2" data-testid="cancel-preview-propose-box">
+            <div className="text-xs text-emerald-100 flex items-start gap-1.5"><CalendarClock size={14} className="mt-0.5 shrink-0 text-emerald-300" />{t("cp_resched_hint", lang).replace("{n}", lose)}</div>
+            {suggestUrl && open && <SuggestedTimes url={suggestUrl} testid="cancel-preview-suggestions" onPick={async (s) => { await onPickSuggestion(s); onOpenChange(false); }} />}
+            <Button onClick={() => { onOpenChange(false); onPropose(); }} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white border-0 h-9" data-testid="cancel-preview-propose">
+              <CalendarClock size={14} className="me-1.5" />{t("dl_propose_other", lang)}
+            </Button>
+          </div>
+        )}
         <AlertDialogFooter>
           <AlertDialogCancel data-testid="cancel-preview-keep" className="bg-white/5 border-white/10 text-slate-200 hover:bg-white/10 hover:text-white">{t("cp_keep", lang)}</AlertDialogCancel>
           <AlertDialogAction data-testid="cancel-preview-confirm" onClick={onConfirm} className="bg-rose-600 hover:bg-rose-500 text-white">{t("cp_confirm", lang)}</AlertDialogAction>

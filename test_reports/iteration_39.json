@@ -1,0 +1,34 @@
+{
+  "summary": "Tested whether VIP calendar bookings (vip_sched) also lock the normal calendar, on the backend (pytest, 17 tests, 16 passed) and the frontend (Playwright). Working: /profiles/{id}/availability busy_slots shows VIP calendar bookings for both the VIP and the client with a ±15 min buffer. Pending bookings and pending proposals are locked too, cancelled bookings are not, and times are converted from Paris to Toronto. Invites, regular bookings and regular reschedules that overlap a booking or its buffer get SLOT_BUSY, for both the VIP and the client. A start exactly at end+15, or a date ending exactly at lock_from, is allowed. On the VIP calendar side, taken shows the booking once with lock_from/lock_to plus normal dates as status 'date'. Booking inside a buffer or a normal-date lock returns 409 SLOT_TAKEN. Rescheduling a confirmed booking does not conflict with itself, and a declined booking frees its slot right away. The UI shows lock chips and the note, and the list refreshed after a pending booking was declined. Regression: all 45 iteration 35/37/38 tests pass. One bug: VIP price-list booking (POST /api/vip/book) is never checked against any slot locks.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/vip/book", "issue": "vip_book() never calls _assert_slot_free, so a VIP price-list booking at 19:30 inside a VIP calendar booking 19:00-21:00 (lock 18:45-21:15) is accepted (200 escrow) instead of SLOT_BUSY. It also ignores normal dates and cancelled locks. Fix: after computing dur_min/local day, call await _assert_slot_free(target, req.scheduled_at[:10], _hm_to_min(req.scheduled_at[11:16]), _pdt(req.scheduled_at), dur=dur_min or DATE_SLOT_MINUTES).", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/invites, POST /api/dates/book", "issue": "Only the recipient's calendar is checked. An inviter/booker who has their own VIP calendar booking (as the client) can still create a regular date overlapping it. Reschedule checks both people, but creation does not."},
+      {"endpoint": "_add_vs_blocks", "issue": "A VIP booking that runs past midnight is stored only on its start date (lock_to > 24:00), so the next local day's calendar doesn't show the spill-over. lock_from is clamped with max(0, ...), so a 00:00 start loses the previous day's 15-min buffer."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter39_vs_normal_locks.py", "/app/backend/tests/seed_iter39_ui.py", "/app/test_reports/pytest/pytest_iter39.xml"],
+  "action_items": [
+    "Add the _assert_slot_free check to POST /api/vip/book (VIP price-list booking) so it is rejected with SLOT_BUSY inside VIP calendar locks and normal dates",
+    "Optional: also check the inviter/booker's own calendar (busy_only) in POST /api/invites and POST /api/dates/book"
+  ],
+  "critical_code_review_comments": [
+    "vip_book lacks any slot-conflict validation (see critical issue)",
+    "_vs_normal_locks correctly uses include_vs=False, so there is no self-conflict or double listing in taken (verified)",
+    "Legacy tests test_slot_locking.py and test_vip_schedule_slots.py fail or error because of stale fixtures (hardcoded user IDs and the old fallback BASE_URL repo-site-restore), not product bugs; they should be refreshed or removed",
+    "Logging in from a headless (UTC) browser PATCHes users.timezone to UTC. Testuser's timezone was flipped and has been restored to America/Toronto"
+  ],
+  "updated_files": ["/app/backend/tests/test_iter39_vs_normal_locks.py", "/app/backend/tests/seed_iter39_ui.py"],
+  "success_rate": {"backend": "94% (16/17), regression 45/45", "frontend": "100%"},
+  "seed_data_creation": "The pytest module creates throwaway users test_i39_* and TEST_i39_* vip_sched/vip_avail docs and deletes them on teardown. For the UI, TEST_i39ui_a/b vip_sched docs were seeded on testuser's 2026-10-28 and then deleted. The UI decline refunded 300 coins to admin and moved -300 escrow on testuser; both were reverted.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && python -m pytest test_iter39_vs_normal_locks.py -n 0. The only expected failure is test_vip_pricelist_book_overlap until /vip/book is fixed. For UI: python seed_iter39_ui.py (prints the date), then open /vip-bookings?tab=availability as testuser (localStorage gd_token) and check the vs-avail-lock-{date}-{i} chips. Clean up with python seed_iter39_ui.py --clean and restore testuser's timezone to America/Toronto (a headless login sets it to UTC)."
+}
