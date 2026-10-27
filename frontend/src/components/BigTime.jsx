@@ -12,16 +12,16 @@ const useNow = (ms = 30000) => {
 /** "Starts in 2h 15m" when the date begins within 24h, "In progress" while it runs. */
 function Countdown({ startAt, endAt, testid }) {
   const { lang } = useApp();
-  const now = useNow();
+  const now = useNow(15000);
   if (!startAt || isNaN(startAt)) return null;
   const left = startAt.getTime() - now;
+  const fmt = (ms) => { const m = Math.ceil(ms / 60000), h = Math.floor(m / 60); return h ? `${h}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`; };
   if (left > 0 && left <= 24 * 3600000) {
-    const m = Math.ceil(left / 60000), h = Math.floor(m / 60);
-    const txt = h ? `${h}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`;
+    const m = Math.ceil(left / 60000), txt = fmt(left);
     return <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border font-mono-num ${m <= 60 ? "bg-rose-500/15 border-rose-500/50 text-rose-200 animate-pulse" : "bg-emerald-500/10 border-emerald-500/40 text-emerald-200"}`} data-testid={testid}>
       <Timer size={12} />{t("cd_starts_in", lang)} {txt}</span>;
   }
-  if (left <= 0 && endAt && now < endAt.getTime()) return <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border bg-emerald-500/20 border-emerald-500/50 text-emerald-200" data-testid={testid}><Timer size={12} />{t("ext_in_progress", lang)}</span>;
+  if (left <= 0 && endAt && now < endAt.getTime()) return <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border bg-emerald-500/20 border-emerald-500/50 text-emerald-200" data-testid={testid}><Timer size={12} />{t("ext_in_progress", lang)} · {t("cd_ends_in", lang)} <span className="font-mono-num" data-testid={`${testid}-left`}>{fmt(endAt.getTime() - now)}</span></span>;
   return null;
 }
 

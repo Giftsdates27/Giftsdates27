@@ -258,6 +258,7 @@ export const VS_T = {
   rsch_length: row("Same length as your booking: {h}h"),
   sort_by: row("Sort:"),
   cd_starts_in: row("Starts in"),
+  cd_ends_in: row("Ends in"),
   arr_label: row("Arrival instructions (optional)"),
   pu_note_label2: row("Note for the pick-up place (optional)"),
   pu_addr_intro2: row("Add where you'd like to be picked up — the pick-up is at the date's start time."),
