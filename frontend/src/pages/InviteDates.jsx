@@ -24,6 +24,7 @@ import DatesEarnings from "../components/DatesEarnings";
 import CancelPreviewDialog from "../components/CancelPreviewDialog";
 import RescheduleDialog, { rescheduleErr } from "../components/RescheduleDialog";
 import TzLines, { tzLabel } from "../components/TzLines";
+import BigTime, { hmOf, dayOf } from "../components/BigTime";
 import { SortSelect, sortItems, useSort } from "../lib/dateSort";
 import { myTz } from "../lib/tz";
 import RescheduleProposalBar from "../components/RescheduleProposalBar";
@@ -74,19 +75,7 @@ function DateChat({ did, meId, lang }) {
 function DateTimeRange({ id, start }) {
   const { lang } = useApp();
   const s = new Date(start), e = new Date(s.getTime() + 150 * 60000);
-  const hm = (x) => x.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" });
-  const nextDay = e.toDateString() !== s.toDateString();
-  return (
-    <div className="mt-1.5 inline-flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs" data-testid={`date-time-range-${id}`}>
-      <Clock size={12} className="text-rose-300" />
-      <span className="text-slate-200">{s.toLocaleDateString(lang, { weekday: "short", day: "numeric", month: "short" })}</span>
-      <span className="text-slate-500">·</span>
-      <span className="text-slate-400">{t("dt_starts", lang)}</span><b className="font-mono-num text-white" data-testid={`date-time-start-${id}`}>{hm(s)}</b>
-      <span className="text-rose-300">→</span>
-      <span className="text-slate-400">{t("dt_ends", lang)}</span><b className="font-mono-num text-white" data-testid={`date-time-end-${id}`}>{hm(e)}{nextDay ? " +1" : ""}</b>
-      <span className="text-slate-500">(2.5h)</span>
-    </div>
-  );
+  return <BigTime day={dayOf(s, lang)} start={hmOf(s, lang)} end={hmOf(e, lang)} nextDay={e.toDateString() !== s.toDateString()} hours={2.5} testid={`date-time-range-${id}`} />;
 }
 
 function SwitchToTaxi({ d, busy, onSend }) {
@@ -213,8 +202,7 @@ function DateCard({ d, reload }) {
           {d.chosen_idea && <div className="text-sm text-rose-200 mt-1"><CalendarHeart size={13} className="inline me-1" />{d.chosen_idea.name}</div>}
           {!d.chosen_idea && d.options && <div className="text-xs text-slate-300 mt-1">{tr("id_options")}: {d.options.map(o => o.name).join(" · ")}</div>}
           {d.location?.venue && <div className="text-xs text-slate-400 mt-1"><MapPin size={12} className="inline me-1" />{[d.location.venue, d.location.address, d.location.city].filter(Boolean).join(", ")} <MapsLink loc={d.location} testid={`date-maps-${d.id}`} /><UnverifiedNote show={d.location?.unverified} testid={`date-loc-unverified-${d.id}`} /></div>}
-          {!isInv && (d.location?.scheduled_start || d.proposed_start) ? <DateTimeRange id={d.id} start={d.location?.scheduled_start || d.proposed_start} />
-            : d.location?.scheduled_start && <div className="text-xs text-slate-400"><Clock size={12} className="inline me-1" />{new Date(d.location.scheduled_start).toLocaleString()} (3h)</div>}
+          {(d.location?.scheduled_start || d.proposed_start) ? <DateTimeRange id={d.id} start={d.location?.scheduled_start || d.proposed_start} /> : null}
           {(d.location?.scheduled_start || d.proposed_start) && (() => { const s = new Date(d.location?.scheduled_start || d.proposed_start);
             const rangeShown = !isInv || !!d.location?.scheduled_start;
             return <TzLines start={s} end={new Date(s.getTime() + 150 * 60000)} shownTz={rangeShown ? myTz() : null} people={[{ label: tzLabel(lang), tz: myTz() }, { label: tzLabel(lang, d.other?.name), tz: d.other?.tz }]} testid={`date-tz-${d.id}`} />; })()}
