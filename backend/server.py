@@ -4346,6 +4346,26 @@ async def _vs_pickup_booking(bid: str):
     if b["status"] not in ("pending", "confirmed"): raise HTTPException(400, "Only active dates")
     return b
 
+PICKUP_ADDR_HOURS = 12
+
+async def _vs_pickup_expire(now):
+    """VIP never added the pick-up location before the deadline → the date is cancelled on the VIP's side (client fully refunded)."""
+    async for b in db.vip_sched.find({"status": {"$in": ["pending", "confirmed"]}, "pickup.status": "offered", "pickup.deadline": {"$lte": now.isoformat()}}, {"_id": 0}):
+        vip = await db.users.find_one({"id": b["vip_id"]}, {"_id": 0, "id": 1, "name": 1})
+        if not vip: continue
+        try:
+            await _vs_cancel(b["id"], vip)
+        except HTTPException:
+            continue
+        await db.vip_sched.update_one({"id": b["id"]}, {"$set": {"pickup.status": "expired", "cancel_reason": "PICKUP_NOT_SET"}})
+        await _close_date_cards(b["id"])
+        await notify(b["vip_id"], "vs_cancelled", "Date cancelled — no pick-up location ⌛",
+                     f"You didn't add the pick-up location in time, so the date on {b['date']} · {b['start']} was cancelled and the client was fully refunded.",
+                     {"booking_id": b["id"]}, email=True, link=f"{PUBLIC_APP_URL}/vip-bookings", cta="Open VIP Bookings")
+        await notify(b["requester_id"], "vs_cancelled", "Date cancelled — VIP didn't add a pick-up location",
+                     f"The VIP didn't add a pick-up location in time for {b['date']} · {b['start']}. The date was cancelled and all your coins were refunded.",
+                     {"booking_id": b["id"]}, email=True, link=f"{PUBLIC_APP_URL}/vip-bookings", cta="Open VIP Bookings")
+
 @api.post("/vip/schedule/bookings/{bid}/pickup/offer")
 async def vs_pickup_offer(bid: str, user=Depends(get_current_user)):
     """Step 1 — inviter offers to pick the VIP up instead of paying the requested taxi fee."""
@@ -4353,10 +4373,15 @@ async def vs_pickup_offer(bid: str, user=Depends(get_current_user)):
     if b["requester_id"] != user["id"]: raise HTTPException(403, "Only the inviter can offer a pick-up")
     if (b.get("taxi") or {}).get("status") != "pending": raise HTTPException(400, "NO_TAXI_REQUEST")
     if (b.get("pickup") or {}).get("status") in ("offered", "address_set"): raise HTTPException(400, "PICKUP_PENDING")
-    pickup = {"status": "offered", "offered_at": datetime.now(timezone.utc).isoformat()}
+    now = datetime.now(timezone.utc)
+    start = _vs_start_dt(b)
+    # the VIP must add the pick-up location within 12h (and at the latest 3h before the date), otherwise the date is cancelled
+    deadline = min(now + timedelta(hours=PICKUP_ADDR_HOURS), (start - timedelta(hours=3)) if start else now + timedelta(hours=PICKUP_ADDR_HOURS))
+    if deadline < now + timedelta(minutes=30): raise HTTPException(400, "TOO_LATE_FOR_PICKUP")
+    pickup = {"status": "offered", "offered_at": now.isoformat(), "deadline": deadline.isoformat()}
     await db.vip_sched.update_one({"id": bid}, {"$set": {"pickup": pickup}})
     await notify(b["vip_id"], "vs_pickup", "Pick-up offered 🚗",
-                 f"Instead of the taxi fee, {user['name']} offers to pick you up for your date on {b['date']} · {b['start']}. Add where you'd like to be picked up in VIP Bookings.",
+                 f"Instead of the taxi fee, {user['name']} offers to pick you up for your date on {b['date']} · {b['start']}. Add where you'd like to be picked up in VIP Bookings before {deadline.strftime('%Y-%m-%d %H:%M')} UTC — otherwise the date is cancelled automatically and the client is fully refunded.",
                  {"booking_id": bid}, email=True, link=f"{PUBLIC_APP_URL}/vip-bookings", cta="Add pick-up location")
     return {"ok": True, "pickup": pickup}
 
@@ -4927,6 +4952,7 @@ def _vs_end_dt(b: dict):
 async def _vs_tick():
     """Fire 30-minute reminders to both parties and auto-complete finished confirmed dates."""
     now = datetime.now(timezone.utc)
+    await _vs_pickup_expire(now)
     conf = await db.vip_sched.find({"status": "confirmed"}, {"_id": 0}).to_list(1000)
     for b in conf:
         start_dt = _vs_start_dt(b)

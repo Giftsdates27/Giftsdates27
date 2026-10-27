@@ -85,7 +85,7 @@ function OfferButton({ b, onDone, lang }) {
   const go = async () => {
     setBusy(true);
     try { await api.post(`/vip/schedule/bookings/${b.id}/pickup/offer`); toast.success(t("pu_sent_toast", lang)); onDone?.(); }
-    catch (e) { toast.error(errMsg(e, lang)); }
+    catch (e) { toast.error(e.response?.data?.detail === "TOO_LATE_FOR_PICKUP" ? t("pu_too_late", lang) : errMsg(e, lang)); }
     finally { setBusy(false); }
   };
   return (
@@ -118,6 +118,12 @@ export default function VipPickupBlock({ b, who, onDone, onCancel }) {
           </div>
           {addr && <div className="flex items-start gap-1.5 text-slate-300"><MapPin size={12} className="mt-0.5 shrink-0" /> {addr} · {t("pu_time", lang)} {pu.time}</div>}
           {pu.note ? <div className="text-slate-400 italic">“{pu.note}”</div> : null}
+        </div>
+      )}
+      {st === "offered" && active && pu.deadline && (
+        <div className="text-[11px] rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-100 p-2 flex items-start gap-1.5" data-testid={`vs-pickup-deadline-${b.id}`}>
+          <Hourglass size={12} className="mt-0.5 shrink-0 text-rose-300" />
+          <span>{t(who === "incoming" ? "pu_deadline_vip" : "pu_deadline_client", lang).replace("{when}", new Date(pu.deadline).toLocaleString(lang, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))}</span>
         </div>
       )}
       {canOffer && <OfferButton b={b} onDone={onDone} lang={lang} />}
