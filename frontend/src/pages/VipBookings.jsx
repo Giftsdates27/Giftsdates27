@@ -11,6 +11,7 @@ import CancelLossNote from "../components/CancelLossNote";
 import SuggestedTimes from "../components/SuggestedTimes";
 import TzLines, { tzLabel } from "../components/TzLines";
 import { myTz, zonedInstant } from "../lib/tz";
+import { SortSelect, sortItems, useSort } from "../lib/dateSort";
 import AddToCalendar from "../components/AddToCalendar";
 import CancelPreviewDialog from "../components/CancelPreviewDialog";
 import DirectionsButton from "../components/DirectionsButton";
@@ -220,6 +221,7 @@ export default function VipBookings() {
   const [tab, setTabState] = useState(urlTab || "requests");
   const setTab = (k) => { setTabState(k); setSearchParams({ tab: k }, { replace: true }); };
   const [booked, setBooked] = useState(null);
+  const [sort, setSort] = useSort("gd_sort_vip");
   const picked = useRef(!!urlTab);
   const [sched, setSched] = useState(null);
   const [mine, setMine] = useState([]);
@@ -267,8 +269,9 @@ export default function VipBookings() {
   const incomingAll = [...pending, ...confirmed, ...(sched?.past || [])];
   const items = [...incomingAll.map((b) => ({ b, who: "incoming" })), ...mine.map((b) => ({ b, who: "outgoing" }))];
   const counts = countByTab([...items.map((x) => ({ status: vsStatus(x.b), inc: x.who === "incoming" })), ...(booked || [])]);
-  const shown = items.filter((x) => vsTab(x.b, x.who) === tab)
-    .sort((x, y) => (DESC_TABS.includes(tab) ? -1 : 1) * `${x.b.date}T${x.b.start}`.localeCompare(`${y.b.date}T${y.b.start}`));
+  const shown = sortItems(items.filter((x) => vsTab(x.b, x.who) === tab)
+    .sort((x, y) => (DESC_TABS.includes(tab) ? -1 : 1) * `${x.b.date}T${x.b.start}`.localeCompare(`${y.b.date}T${y.b.start}`)), sort,
+    ({ b, who }) => ({ start: zonedInstant(b.date, b.start, b.tz), created: b.created_at, coins: b.coins, name: who === "incoming" ? b.requester?.name : b.vip_card?.name }));
   const bookedShown = (booked || []).filter((x) => tabOf(x.status, x.inc) === tab).length;
   const earn = sched?.earnings || { earned: 0, held: 0 };
   const todayItems = items.filter((x) => ["pending", "confirmed", "completed"].includes(x.b.status));
@@ -308,7 +311,10 @@ export default function VipBookings() {
         </div>
       ) : (
         <div className="mt-6 space-y-6" data-testid={`vs-panel-${tab}`} key={tab}>
-          <p className="text-xs text-slate-500">{t(`dp_hint_${tab}`, lang)}</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-slate-500">{t(`dp_hint_${tab}`, lang)}</p>
+            <SortSelect value={sort} onChange={setSort} testid="vs-sort" />
+          </div>
           {shown.length > 0 && <div className="space-y-4">
             {shown.map(({ b, who }) => (
               <div key={b.id} className="relative">
@@ -317,7 +323,7 @@ export default function VipBookings() {
               </div>
             ))}
           </div>}
-          <DateBookingList mode="vip" onItems={setBooked} tab={tab} />
+          <DateBookingList mode="vip" onItems={setBooked} tab={tab} sort={sort} />
           {booked && shown.length + bookedShown === 0 && <TabEmpty tab={tab} />}
         </div>
       )}

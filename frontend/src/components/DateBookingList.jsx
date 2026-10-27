@@ -11,6 +11,7 @@ import RescheduleDialog, { rescheduleErr } from "./RescheduleDialog";
 import RescheduleProposalBar from "./RescheduleProposalBar";
 import TzLines, { tzLabel } from "./TzLines";
 import { myTz, zonedInstant, cityOf } from "../lib/tz";
+import { sortItems } from "../lib/dateSort";
 import DateReportForm, { DateStartedNote, ReportReplyBlock, ReportStatusNote } from "./DateReportForm";
 import { MapsLink } from "./AddressPicker";
 import VerifiedAddressForm, { addrHintKey, addressReady, addrPayload, addrErrKey, UnverifiedNote } from "./VerifiedAddressForm";
@@ -55,7 +56,7 @@ const STATUS_COLOR = { escrow: "bg-amber-500/15 text-amber-300 border-amber-500/
  * mode="regular" → shows only non-VIP bookings (standard dates).
  * mode="vip"     → shows only VIP bookings (booked via a member's VIP section).
  */
-export default function DateBookingList({ mode = "regular", onItems, filter = "all", tab }) {
+export default function DateBookingList({ mode = "regular", onItems, filter = "all", tab, sort }) {
   const { lang, refreshUser, meta, user } = useApp();
   const pct = Math.round((meta?.cancel_refund_pct ?? 0.5) * 100);
   const [data, setData] = useState({ outgoing: [], incoming: [] });
@@ -81,7 +82,8 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
     .sort((x, y) => String(x.b.scheduled_at).localeCompare(String(y.b.scheduled_at)));
   const statusKey = all.map(x => `${bookingStatus(x.b)}:${x.inc}`).join(",");
   useEffect(() => { if (!loaded) return; onItems?.(all.map(x => ({ id: x.b.id, status: bookingStatus(x.b), inc: x.inc, start: x.b.scheduled_at, name: x.inc ? x.b.from_name : x.b.to_name, place: x.b.venue }))); }, [statusKey, loaded]); // eslint-disable-line
-  const shown = all.filter(x => tab ? tabOf(bookingStatus(x.b), x.inc) === tab : matchesFilter(x.b.status, filter));
+  const shown = sortItems(all.filter(x => tab ? tabOf(bookingStatus(x.b), x.inc) === tab : matchesFilter(x.b.status, filter)), sort,
+    ({ b, inc }) => ({ start: b.scheduled_at, created: b.created_at, coins: b.coins, name: inc ? b.from_name : b.to_name }));
 
   const [cancelFor, setCancelFor] = useState(null);
   const declineB = declineFor ? all.find(x => x.b.id === declineFor)?.b : null;

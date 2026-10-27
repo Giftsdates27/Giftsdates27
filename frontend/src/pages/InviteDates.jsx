@@ -24,6 +24,7 @@ import DatesEarnings from "../components/DatesEarnings";
 import CancelPreviewDialog from "../components/CancelPreviewDialog";
 import RescheduleDialog, { rescheduleErr } from "../components/RescheduleDialog";
 import TzLines, { tzLabel } from "../components/TzLines";
+import { SortSelect, sortItems, useSort } from "../lib/dateSort";
 import { myTz } from "../lib/tz";
 import RescheduleProposalBar from "../components/RescheduleProposalBar";
 
@@ -381,6 +382,7 @@ export default function InviteDates() {
   useEffect(() => { load(); const id = setInterval(load, 20000); return () => clearInterval(id); }, [load]);
 
   const [booked, setBooked] = useState(null);
+  const [sort, setSort] = useSort("gd_sort_dates");
   const urlTab = DATE_TABS.includes(params.get("tab")) ? params.get("tab") : null;
   const [tab, setTabState] = useState(urlTab || "requests");
   const setTab = (k) => { setTabState(k); setParams({ tab: k }, { replace: true }); };
@@ -393,8 +395,9 @@ export default function InviteDates() {
     if (!counts.requests) { const first = DATE_TABS.find(k => counts[k]); if (first) setTabState(first); }
   }, [data, booked]); // eslint-disable-line
   const nothing = data && booked && inv.length + booked.length === 0;
-  const shown = inv.filter(x => tabOf(x.d.status, x.inc) === tab)
-    .sort((a, b) => String(b.d.created_at || "").localeCompare(String(a.d.created_at || "")));
+  const shown = sortItems(inv.filter(x => tabOf(x.d.status, x.inc) === tab)
+    .sort((a, b) => String(b.d.created_at || "").localeCompare(String(a.d.created_at || ""))), sort,
+    ({ d }) => ({ start: d.location?.scheduled_start || d.proposed_start, created: d.created_at, coins: d.total_hold || d.coins, name: d.other?.name }));
   const bookedShown = (booked || []).filter(x => tabOf(x.status, x.inc) === tab).length;
   const todayItems = [
     ...inv.map(({ d, inc }) => ({ id: d.id, start: d.location?.scheduled_start || d.proposed_start, name: d.other?.name, place: d.location?.venue, tab: tabOf(d.status, inc), card: `date-card-${d.id}` })),
@@ -416,7 +419,10 @@ export default function InviteDates() {
         <DatesStatTiles value={tab} onChange={setTab} counts={counts} />
         <DatesTabBar value={tab} onChange={setTab} counts={counts} />
         <div className="mt-6 space-y-6" data-testid={`dates-panel-${tab}`} key={tab}>
-          <p className="text-xs text-slate-500">{t(`dp_hint_${tab}`, lang)}</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-slate-500">{t(`dp_hint_${tab}`, lang)}</p>
+            <SortSelect value={sort} onChange={setSort} testid="dates-sort" />
+          </div>
           {shown.length > 0 && <div className="space-y-3">
             {shown.map(({ d, inc }) => (
               <div key={d.id} className="relative">
@@ -425,7 +431,7 @@ export default function InviteDates() {
               </div>
             ))}
           </div>}
-          <DateBookingList mode="regular" onItems={setBooked} tab={tab} />
+          <DateBookingList mode="regular" onItems={setBooked} tab={tab} sort={sort} />
           {data && booked && shown.length + bookedShown === 0 && <TabEmpty tab={tab} />}
           {tab === "cancelled" && <CancelledDates />}
         </div>
