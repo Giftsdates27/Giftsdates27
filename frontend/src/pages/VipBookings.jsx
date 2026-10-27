@@ -169,7 +169,7 @@ function BookingCard({ b, who, onConfirm, onDecline, onCancel, onReschedule, onR
       </div>
       <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
         {b.status === "confirmed" && <AddToCalendar id={b.id} title={`GiftsDates VIP: ${b.activity || card?.name || "Date"}`} place={[b.location?.address, b.location?.city].filter(Boolean).join(", ") || b.venue || b.activity} start={start} end={end} link="/vip-bookings" />}
-        {b.status === "confirmed" && b.location?.address && <DirectionsButton loc={b.location} testid={`vs-directions-${b.id}`} />}
+        {b.status === "confirmed" && b.place !== "own" && b.location?.address && <DirectionsButton loc={b.location} testid={`vs-directions-${b.id}`} />}
         <UnverifiedNote show={b.location?.unverified} testid={`vs-unverified-${b.id}`} />
         {who === "outgoing" && checkInOpen && !b.arrived_at && <ArrivedButton b={b} onDone={onReload} />}
         {lateOpen && <RunningLateButton b={b} onDone={onReload} />}

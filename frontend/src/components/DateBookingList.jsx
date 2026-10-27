@@ -194,7 +194,7 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
         {["accepted", "confirmed"].includes(b.status) && (
           <div className="mt-2 flex flex-wrap gap-2"><AddToCalendar id={b.id} title={`GiftsDates: ${b.selected_activity || "Date"} · ${b.venue}`}
             place={[b.venue, b.address, b.city, b.country].filter(Boolean).join(", ")} start={new Date(b.scheduled_at)} end={b.duration_min ? vipEnd(b) : undefined} />
-            {b.address && <DirectionsButton loc={b} testid={`date-directions-${b.id}`} />}
+            {b.address && !(b.vip && b.place === "own") && <DirectionsButton loc={b} testid={`date-directions-${b.id}`} />}
             {b.vip && !isIncoming && started && Date.now() < vipEnd(b).getTime() && <ExtendDateButton id={b.id} url={`/vip/book/${b.id}/extend`} price={b.extra_hour_price || 250} onDone={load} />}</div>
         )}
         {["accepted", "confirmed"].includes(b.status) && <div className="mt-2"><LiveLocation kind="booking" id={b.id} otherName={isIncoming ? b.from_name : b.to_name}
