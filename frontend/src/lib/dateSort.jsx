@@ -4,24 +4,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { useApp } from "../context/AppContext";
 import { t } from "./i18n";
 
-export const SORTS = ["auto", "soonest", "latest", "newest", "coins", "name"];
+export const SORTS = ["soonest", "latest", "newest", "coins"];
 const ms = (v) => { const n = v instanceof Date ? v.getTime() : new Date(v || 0).getTime(); return isNaN(n) ? 0 : n; };
 
-/** Sort a list with `get(x) -> { start, created, coins, name }`; "auto" keeps the given order. */
+/** Sort a list with `get(x) -> { start, created, coins }`. */
 export const sortItems = (list, key, get) => {
-  if (!key || key === "auto") return list;
   const cmp = {
     soonest: (a, b) => ms(a.start) - ms(b.start),
     latest: (a, b) => ms(b.start) - ms(a.start),
     newest: (a, b) => ms(b.created) - ms(a.created),
     coins: (a, b) => (b.coins || 0) - (a.coins || 0),
-    name: (a, b) => String(a.name || "").localeCompare(String(b.name || "")),
   }[key];
   return cmp ? [...list].sort((x, y) => cmp(get(x), get(y))) : list;
 };
 
 export const useSort = (storageKey) => {
-  const [v, setV] = React.useState(() => { const s = localStorage.getItem(storageKey); return SORTS.includes(s) ? s : "auto"; });
+  const [v, setV] = React.useState(() => { const s = localStorage.getItem(storageKey); return SORTS.includes(s) ? s : "soonest"; });
   return [v, (k) => { setV(k); localStorage.setItem(storageKey, k); }];
 };
 
