@@ -134,11 +134,16 @@ export default function AddressPicker(props) {
   const SearchPicker = GMAPS_KEY ? GoogleAddressPicker : OsmAddressPicker;
   const [mode, setMode] = useState("manual"); // "manual" (default, no maps) | "map" (optional)
   const set = (patch) => onChange({ ...(value || {}), ...patch });
-  // Pre-select the person's own country so most people never need to open the list.
+  // Pre-select the person's own country and city so most people never need to type them.
   useEffect(() => {
+    if (!manualFields) return;
     const own = normalizeCountry(user?.country || "");
-    if (manualFields && !value?.country && own && ALL_COUNTRIES.some((c) => c.name === own)) set({ country: own });
-  }, [user?.country]); // eslint-disable-line react-hooks/exhaustive-deps
+    const patch = {};
+    if (!value?.country && own && ALL_COUNTRIES.some((c) => c.name === own)) patch.country = own;
+    const sameCountry = !value?.country || value.country === own;
+    if (!value?.city && user?.city && sameCountry && (patch.country || value?.country)) patch.city = user.city;
+    if (Object.keys(patch).length) set(patch);
+  }, [user?.country, user?.city]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When the parent already renders its own manual address inputs, just show the search picker.
   if (!manualFields) return <SearchPicker {...props} testid={tid} />;
