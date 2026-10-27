@@ -141,3 +141,17 @@ export const normalizeCountry = (detected) => {
   });
   return partial ? partial.name : raw;
 };
+
+// Every country (ISO 3166-1) for address forms: the curated list first, then all the others A–Z.
+const ISO2 = "AD AE AF AG AI AL AM AO AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BW BY BZ CA CD CF CG CH CI CK CL CM CN CO CR CU CV CW CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GT GU GW GY HK HN HR HT HU ID IE IL IM IN IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SI SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TG TH TJ TL TM TN TO TR TT TV TW TZ UA UG US UY UZ VA VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW".split(" ");
+const flagOf = (cc) => String.fromCodePoint(...[...cc].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65));
+export const ALL_COUNTRIES = (() => {
+  let dn = null;
+  try { dn = new Intl.DisplayNames(["en"], { type: "region" }); } catch { return COUNTRIES; }
+  const have = new Set(COUNTRIES.map((c) => c.name.toLowerCase()));
+  const norm = (n) => COUNTRY_ALIASES[(n || "").toLowerCase()] || n;
+  const extra = ISO2.map((cc) => ({ name: norm(dn.of(cc)), flag: flagOf(cc) }))
+    .filter((c) => c.name && !have.has(c.name.toLowerCase()) && have.add(c.name.toLowerCase()))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return [...COUNTRIES, ...extra];
+})();

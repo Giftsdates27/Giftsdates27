@@ -3,15 +3,16 @@ import { Check, ChevronsUpDown, Globe } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./ui/command";
 import { Button } from "./ui/button";
-import { COUNTRIES } from "../lib/countries";
+import { COUNTRIES, ALL_COUNTRIES } from "../lib/countries";
 import { t } from "../lib/i18n";
 
 // Searchable country dropdown. "Global" (🌍) is always the first option.
-export default function CountrySelect({ value, onChange, lang, testid = "country-select", placeholder }) {
+export default function CountrySelect({ value, onChange, lang, testid = "country-select", placeholder, all = false }) {
   const [open, setOpen] = useState(false);
-  const selected = COUNTRIES.find((c) => c.name.toLowerCase() === (value || "").toLowerCase());
+  const LIST = all ? ALL_COUNTRIES : COUNTRIES;
+  const selected = LIST.find((c) => c.name.toLowerCase() === (value || "").toLowerCase());
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <Button
           data-testid={testid}
@@ -28,13 +29,13 @@ export default function CountrySelect({ value, onChange, lang, testid = "country
           <ChevronsUpDown size={15} className="ms-2 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="p-0 bg-[#161320] border-white/10 text-white w-[--radix-popover-trigger-width] min-w-[240px]" align="start">
+      <PopoverContent className="z-[200] p-0 bg-[#161320] border-white/10 text-white w-[--radix-popover-trigger-width] min-w-[240px]" align="start">
         <Command className="bg-transparent">
           <CommandInput data-testid={`${testid}-search`} placeholder={t("search_country", lang)} className="text-white" />
           <CommandList>
             <CommandEmpty>{t("no_results", lang)}</CommandEmpty>
             <CommandGroup>
-              {COUNTRIES.map((c) => (
+              {LIST.map((c) => (
                 <CommandItem
                   key={c.name}
                   value={c.name}

@@ -4,7 +4,7 @@ import { Input } from "./ui/input";
 import { useApp } from "../context/AppContext";
 import { t } from "../lib/i18n";
 import CountrySelect from "./CountrySelect";
-import { COUNTRIES } from "../lib/countries";
+import { COUNTRIES, normalizeCountry } from "../lib/countries";
 
 const GMAPS_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
@@ -40,7 +40,7 @@ function parseComponents(place) {
     city: get("locality") || get("postal_town") || get("sublocality_level_1") || get("administrative_area_level_2") || "",
     region: get("administrative_area_level_1", true),
     postal_code: postal,
-    country: get("country"),
+    country: normalizeCountry(get("country")),
     lat: place.geometry?.location?.lat(), lng: place.geometry?.location?.lng(),
   };
 }
@@ -164,7 +164,7 @@ export default function AddressPicker(props) {
           <Input data-testid={`${tid}-manual-city`} value={value?.city || ""} onChange={(e) => set({ city: e.target.value })} placeholder={t("city", lang)} className="bg-white/5 border-white/10 h-9" />
           <Input data-testid={`${tid}-manual-postal`} value={value?.postal_code || ""} onChange={(e) => set({ postal_code: e.target.value })} placeholder={t("postal_code", lang)} className="bg-white/5 border-white/10 h-9" />
         </div>
-        <CountrySelect value={value?.country || ""} onChange={(c) => set({ country: c })} lang={lang} testid={`${tid}-manual-country`} />
+        <CountrySelect all value={value?.country || ""} onChange={(c) => set({ country: c })} lang={lang} testid={`${tid}-manual-country`} />
       </div>
     </div>
   );
