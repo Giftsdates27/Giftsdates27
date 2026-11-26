@@ -5,6 +5,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AppProvider, useApp } from "@/context/AppContext";
+import UnlockUpsell from "@/components/UnlockUpsell";
 import Nav from "@/components/Nav";
 import Landing from "@/pages/Landing";
 import Auth from "@/pages/Auth";
@@ -93,6 +94,7 @@ export default function App() {
       <BrowserRouter>
         <AppProvider>
           <Shell />
+          <UnlockUpsell />
           <Toaster theme="dark" position="top-right" toastOptions={{ style: { background: "#161320", border: "1px solid rgba(225,29,72,0.3)", color: "#fff" } }}/>
         </AppProvider>
       </BrowserRouter>

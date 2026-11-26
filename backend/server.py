@@ -2834,7 +2834,7 @@ async def _assert_slot_free(u, day, start_min, start_dt, exclude=None, dur=DATE_
         lf, lt = _hm_to_min(b["lock_from"]), _hm_to_min(b["lock_to"])
         if lt <= lf: lt += 24 * 60
         if start_min < lt and lf < end_min:
-            raise HTTPException(400, f"{'SLOT_LOCKED' if b['reason'] == 'cancelled' else 'SLOT_BUSY'}:{b['from']}-{b['to']}")
+            raise HTTPException(400, f"SLOT_LOCKED:{b['from']}-{b['to']}|{day}|{u['id']}" if b["reason"] == "cancelled" else f"SLOT_BUSY:{b['from']}-{b['to']}")
 
 class UnlockSlotReq(BaseModel):
     day: str
