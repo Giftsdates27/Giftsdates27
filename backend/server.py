@@ -2799,11 +2799,13 @@ async def _taken_blocks(u, exclude=None, include_vs=True):
 
 async def _add_vs_blocks(uid, u, add_raw, exclude=None):
     """VIP calendar bookings (as VIP or client) + their pending proposals lock the user's normal calendar too (15-min buffer each side)."""
-    docs = await db.vip_sched.find({"status": {"$in": ["pending", "confirmed"]}, "id": {"$ne": exclude}, "$or": [{"vip_id": uid}, {"requester_id": uid}]},
-                                   {"_id": 0, "date": 1, "start": 1, "end": 1, "tz": 1, "reschedule_proposal": 1}).to_list(500)
+    docs = await db.vip_sched.find({"id": {"$ne": exclude}, "$or": [{"vip_id": uid}, {"requester_id": uid}],
+                                    "$and": [{"$or": [{"status": {"$in": ["pending", "confirmed"]}}, {"status": "cancelled", "lock_for": uid}]}]},
+                                   {"_id": 0, "status": 1, "date": 1, "start": 1, "end": 1, "tz": 1, "reschedule_proposal": 1}).to_list(500)
     if not docs: return
     utz = u.get("timezone") or ((await db.users.find_one({"id": uid}, {"_id": 0, "timezone": 1})) or {}).get("timezone")
-    def put(date, start, end, tz):
+    unlocked = set(u.get("unlocked_slots") or [])
+    def put(date, start, end, tz, reason="booked"):
         dur = (_hm_to_min(end) - _hm_to_min(start)) % 1440 or 60
         if utz and tz and utz != tz:
             try:
@@ -2811,10 +2813,13 @@ async def _add_vs_blocks(uid, u, add_raw, exclude=None):
                 date, start = loc.strftime("%Y-%m-%d"), loc.strftime("%H:%M")
             except Exception: pass
         sm = _hm_to_min(start)
-        d, b = _block(date, sm, "booked", sm + dur)
+        d, b = _block(date, sm, reason, sm + dur)
+        if reason == "cancelled" and f"{d}|{b['from']}" in unlocked: return
         b["lock_from"] = _min_to_hm(max(0, sm - VIP_SCHED_BUFFER)); b["lock_to"] = _min_to_hm(sm + dur + VIP_SCHED_BUFFER)
         add_raw(d, b)
     for b in docs:
+        if b["status"] == "cancelled":
+            put(b["date"], b["start"], b["end"], b.get("tz"), "cancelled"); continue
         put(b["date"], b["start"], b["end"], b.get("tz"))
         p = b.get("reschedule_proposal")
         if p: put(p["date"], p["start"], p["end"], b.get("tz"))
@@ -6496,6 +6501,70 @@ async def _run_booking_reminders():
             for uid in (b["from_id"], b["to_id"]):
                 await notify(uid, "date_reminder", title, body, {"booking_id": b["id"]}, email=email, link=DATES_LINK, cta="View Date", sms=False)
 
+NOT_CONFIRMED_NOTE = "Not confirmed 15 minutes before the start — cancelled automatically. All coins went back to the inviter."
+INVITE_UNCONFIRMED = ["INVITATION_SENT", "DATE_ACTIVITY_SELECTED", "LOCATION_PROPOSED", "TAXI_REQUESTED", "PICKUP_ADDRESS_PENDING", "PICKUP_ADDRESS_SELECTED"]
+
+async def _premium_reopen(uids, day, start_min):
+    """The auto-cancelled time stays locked for non-premium users; premium members get it back right away."""
+    for uid in uids:
+        u = await db.users.find_one({"id": uid}, {"_id": 0})
+        if u and has_premium(u):
+            await db.users.update_one({"id": uid}, {"$addToSet": {"unlocked_slots": f"{day}|{_min_to_hm(start_min)}"}})
+
+async def _expired_notify(inviter, invited, when, coins, ref, link):
+    await notify(inviter, "date_declined", "Date cancelled — not confirmed in time ⌛",
+                 f"Your date on {when} wasn't confirmed 15 minutes before the start, so it was cancelled automatically. All your coins (🪙 {coins}) were refunded.",
+                 ref, email=True, link=link, cta="Open Dates")
+    await notify(invited, "date_declined", "Invitation expired ⌛",
+                 f"You didn't confirm the date on {when} in time, so it was cancelled automatically and the coins went back to the inviter.",
+                 ref, email=True, link=link, cta="Open Dates")
+
+async def _auto_cancel_unconfirmed():
+    now = _now(); cutoff = now + timedelta(minutes=15)
+    base = {"cancel_reason": "NOT_CONFIRMED", "cancelled_by": "system", "cancelled_at": now.isoformat(), "decline_reason": NOT_CONFIRMED_NOTE}
+    # normal & VIP-price-list bookings waiting for the invited person's answer
+    async for b in db.date_bookings.find({"status": "escrow"}, {"_id": 0}):
+        sa = b.get("scheduled_at") or ""
+        st = _wall_utc(sa[:10], sa[11:16], b["tz"]) if b.get("vip") and b.get("tz") and len(sa) >= 16 and not sa.endswith("Z") and "+" not in sa[16:] else _pdt(sa)
+        if not st: continue
+        if st.tzinfo is None: st = st.replace(tzinfo=timezone.utc)
+        if st > cutoff: continue
+        coins = int(b.get("coins") or 0)
+        res = await db.date_bookings.update_one({"id": b["id"], "status": "escrow"}, {"$set": {"status": "cancelled", "refund": coins, "compensation": 0, **base}})
+        if not res.modified_count: continue
+        await db.users.update_one({"id": b["from_id"]}, {"$inc": {"coins": coins}})
+        await db.users.update_one({"id": b["to_id"]}, {"$inc": {"escrow": -coins}})
+        await _premium_reopen((b["from_id"], b["to_id"]), (b.get("local_day") or sa)[:10], _booking_start_min(b))
+        await _close_date_cards(b["id"])
+        await _expired_notify(b["from_id"], b["to_id"], f"{(b.get('local_day') or sa)[:10]} · {_min_to_hm(_booking_start_min(b))}", coins, {"booking_id": b["id"]}, DATES_LINK)
+    # invitation flow dates not confirmed yet
+    async for d in db.dates.find({"status": {"$in": INVITE_UNCONFIRMED}}, {"_id": 0}):
+        st = _pdt((d.get("location") or {}).get("scheduled_start") or d.get("proposed_start"))
+        if not st: continue
+        if st.tzinfo is None: st = st.replace(tzinfo=timezone.utc)
+        if st > cutoff: continue
+        res = await db.dates.update_one({"id": d["id"], "status": d["status"]}, {"$set": {"status": "CANCELLED", **base}})
+        if not res.modified_count: continue
+        await _refund(d, "full_inviter", "CANCELLED")
+        await _log_status(d["id"], "CANCELLED", "system")
+        day, tm = d.get("local_day") or st.strftime("%Y-%m-%d"), d.get("local_time") or st.strftime("%H:%M")
+        await _premium_reopen((d["inviter_id"], d["recipient_id"]), day, _hm_to_min(tm))
+        await _expired_notify(d["inviter_id"], d["recipient_id"], f"{day} · {tm}", int(d.get("total_hold") or 0), {"date_id": d["id"]}, DATES_LINK)
+    # VIP calendar bookings the VIP never confirmed
+    async for b in db.vip_sched.find({"status": "pending"}, {"_id": 0}):
+        st = _vs_start_dt(b)
+        if not st or st > cutoff: continue
+        lock_for = []
+        for uid in (b["vip_id"], b["requester_id"]):
+            u = await db.users.find_one({"id": uid}, {"_id": 0})
+            if u and not has_premium(u): lock_for.append(uid)
+        coins = int(b.get("coins") or 0)
+        res = await db.vip_sched.update_one({"id": b["id"], "status": "pending"}, {"$set": {"status": "cancelled", "refund": coins, "compensation": 0, "platform_fee": 0, "lock_for": lock_for, **base}})
+        if not res.modified_count: continue
+        await _vs_release(b, "system", "cancelled")
+        await _close_date_cards(b["id"])
+        await _expired_notify(b["requester_id"], b["vip_id"], f"{b['date']} · {b['start']}", coins, {"booking_id": b["id"]}, f"{PUBLIC_APP_URL}/vip-bookings")
+
 async def _date_lifecycle_loop():
     """Internal background loop: fires date reminders to both parties for confirmed
     dates (24h/3h/1h/30m/start/end) and auto-completes finished dates. Runs every 60s."""
@@ -6503,6 +6572,7 @@ async def _date_lifecycle_loop():
     await asyncio.sleep(20)
     while True:
         try:
+            await _auto_cancel_unconfirmed()
             await _run_lifecycle()
             await _run_booking_reminders()
         except Exception as ex:
@@ -6550,6 +6620,7 @@ async def cron_tick(authorization: Optional[str] = Header(None)):
     # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
     import asyncio
     _cron_auth(authorization)
+    asyncio.create_task(_auto_cancel_unconfirmed())
     asyncio.create_task(_run_lifecycle())
     asyncio.create_task(_run_booking_reminders())
     asyncio.create_task(_vs_tick())

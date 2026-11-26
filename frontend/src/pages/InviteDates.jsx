@@ -72,10 +72,10 @@ function DateChat({ did, meId, lang }) {
   );
 }
 
-function DateTimeRange({ id, start }) {
+function DateTimeRange({ id, start, active }) {
   const { lang } = useApp();
   const s = new Date(start), e = new Date(s.getTime() + 150 * 60000);
-  return <BigTime day={dayOf(s, lang)} start={hmOf(s, lang)} end={hmOf(e, lang)} nextDay={e.toDateString() !== s.toDateString()} hours={2.5} startAt={s} endAt={e} testid={`date-time-range-${id}`} />;
+  return <BigTime day={dayOf(s, lang)} start={hmOf(s, lang)} end={hmOf(e, lang)} nextDay={e.toDateString() !== s.toDateString()} hours={2.5} startAt={active ? s : null} endAt={e} testid={`date-time-range-${id}`} />;
 }
 
 function SwitchToTaxi({ d, busy, onSend }) {
@@ -202,7 +202,7 @@ function DateCard({ d, reload }) {
           {d.chosen_idea && <div className="text-sm text-rose-200 mt-1"><CalendarHeart size={13} className="inline me-1" />{d.chosen_idea.name}</div>}
           {!d.chosen_idea && d.options && <div className="text-xs text-slate-300 mt-1">{tr("id_options")}: {d.options.map(o => o.name).join(" · ")}</div>}
           {d.location?.venue && <div className="text-xs text-slate-400 mt-1"><MapPin size={12} className="inline me-1" />{[d.location.venue, d.location.address, d.location.city].filter(Boolean).join(", ")} <MapsLink loc={d.location} testid={`date-maps-${d.id}`} /><UnverifiedNote show={d.location?.unverified} testid={`date-loc-unverified-${d.id}`} /></div>}
-          {(d.location?.scheduled_start || d.proposed_start) ? <DateTimeRange id={d.id} start={d.location?.scheduled_start || d.proposed_start} /> : null}
+          {(d.location?.scheduled_start || d.proposed_start) ? <DateTimeRange id={d.id} start={d.location?.scheduled_start || d.proposed_start} active={!["CANCELLED", "CANCELLED_TRANSPORTATION", "REFUNDED", "COMPLETED", "COMPLETED_AUTO"].includes(d.status)} /> : null}
           {(d.location?.scheduled_start || d.proposed_start) && (() => { const s = new Date(d.location?.scheduled_start || d.proposed_start);
             const rangeShown = !isInv || !!d.location?.scheduled_start;
             return <TzLines start={s} end={new Date(s.getTime() + 150 * 60000)} shownTz={rangeShown ? myTz() : null} people={[{ label: tzLabel(lang), tz: myTz() }, { label: tzLabel(lang, d.other?.name), tz: d.other?.tz }]} testid={`date-tz-${d.id}`} />; })()}

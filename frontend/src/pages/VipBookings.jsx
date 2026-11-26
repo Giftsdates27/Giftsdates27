@@ -157,7 +157,7 @@ function BookingCard({ b, who, onConfirm, onDecline, onCancel, onReschedule, onR
         <div className="min-w-0">
           <div className="font-semibold text-white truncate">{card?.name}{card?.age ? `, ${card.age}` : ""}</div>
           {(() => { const sAt = zonedInstant(b.date, b.start, b.tz);
-            return <BigTime day={dayOf(new Date(`${b.date}T12:00:00`), lang)} start={b.start} end={b.end} nextDay={end.getDate() !== start.getDate()} startAt={sAt} endAt={new Date(sAt.getTime() + (end - start))} testid={`vs-bigtime-${b.id}`} />; })()}
+            return <BigTime day={dayOf(new Date(`${b.date}T12:00:00`), lang)} start={b.start} end={b.end} nextDay={end.getDate() !== start.getDate()} startAt={["pending", "confirmed"].includes(b.status) ? sAt : null} endAt={new Date(sAt.getTime() + (end - start))} testid={`vs-bigtime-${b.id}`} />; })()}
           {(() => { const s = zonedInstant(b.date, b.start, b.tz), e = new Date(s.getTime() + (end - start));
             return <TzLines start={s} end={e} shownTz={b.tz} people={[{ label: tzLabel(lang), tz: myTz() }, { label: tzLabel(lang, card?.name), tz: who === "incoming" ? b.requester?.tz : b.vip_card?.tz }]} testid={`vs-tz-${b.id}`} />; })()}
           <BookingPlace b={b} lang={lang} who={who} />
@@ -208,7 +208,7 @@ function BookingCard({ b, who, onConfirm, onDecline, onCancel, onReschedule, onR
     </div>
     {who === "outgoing" && ["pending", "confirmed"].includes(b.status) && now < start.getTime() && <div className="mt-3"><CancelLossNote total={b.coins || 0} taxi={b.taxi_coins || 0} testid={`vs-cancel-loss-${b.id}`} /></div>}
     {b.reschedule_proposal && ["pending", "confirmed"].includes(b.status) && <RescheduleProposal b={b} who={who} onDone={onReload} />}
-    {b.status === "declined" && <DeclineNote reason={b.decline_reason} testid={`vs-decline-reason-${b.id}`} />}
+    {(b.status === "declined" || b.cancel_reason === "NOT_CONFIRMED") && <DeclineNote reason={b.decline_reason} testid={`vs-decline-reason-${b.id}`} />}
     {b.status === "reported" && <NoShowCase b={b} who={who} onDone={onReload} />}
     <VipPickupBlock b={b} who={who} onDone={onReload} onCancel={onCancel} />
     <VipTaxiBlock b={b} who={who} onDone={onReload} />
