@@ -6519,8 +6519,16 @@ async def _expired_notify(inviter, invited, when, coins, ref, link):
                  f"You didn't confirm the date on {when} in time, so it was cancelled automatically and the coins went back to the inviter.",
                  ref, email=True, link=link, cta="Open Dates")
 
+async def _confirm_nudge(coll, doc_id, uid, when, ref, link):
+    """One reminder, 1 hour before the auto-cancel, to the person who still has to confirm."""
+    res = await coll.update_one({"id": doc_id, "confirm_reminded": {"$ne": when}}, {"$set": {"confirm_reminded": when}})  # keyed by time so a rescheduled date gets its own nudge
+    if not res.modified_count: return
+    await notify(uid, "date_request", "Please confirm your date ⏰",
+                 f"Your date on {when} isn't confirmed yet. Confirm it within 1 hour — otherwise it's cancelled automatically 15 minutes before the start.",
+                 ref, email=True, link=link, cta="Confirm date")
+
 async def _auto_cancel_unconfirmed():
-    now = _now(); cutoff = now + timedelta(minutes=15)
+    now = _now(); cutoff = now + timedelta(minutes=15); nudge = cutoff + timedelta(hours=1)
     base = {"cancel_reason": "NOT_CONFIRMED", "cancelled_by": "system", "cancelled_at": now.isoformat(), "decline_reason": NOT_CONFIRMED_NOTE}
     # normal & VIP-price-list bookings waiting for the invited person's answer
     async for b in db.date_bookings.find({"status": "escrow"}, {"_id": 0}):
@@ -6528,7 +6536,9 @@ async def _auto_cancel_unconfirmed():
         st = _wall_utc(sa[:10], sa[11:16], b["tz"]) if b.get("vip") and b.get("tz") and len(sa) >= 16 and not sa.endswith("Z") and "+" not in sa[16:] else _pdt(sa)
         if not st: continue
         if st.tzinfo is None: st = st.replace(tzinfo=timezone.utc)
-        if st > cutoff: continue
+        if st > cutoff:
+            if st <= nudge: await _confirm_nudge(db.date_bookings, b["id"], b["to_id"], f"{(b.get('local_day') or sa)[:10]} · {_min_to_hm(_booking_start_min(b))}", {"booking_id": b["id"]}, DATES_LINK)
+            continue
         coins = int(b.get("coins") or 0)
         res = await db.date_bookings.update_one({"id": b["id"], "status": "escrow"}, {"$set": {"status": "cancelled", "refund": coins, "compensation": 0, **base}})
         if not res.modified_count: continue
@@ -6542,7 +6552,11 @@ async def _auto_cancel_unconfirmed():
         st = _pdt((d.get("location") or {}).get("scheduled_start") or d.get("proposed_start"))
         if not st: continue
         if st.tzinfo is None: st = st.replace(tzinfo=timezone.utc)
-        if st > cutoff: continue
+        if st > cutoff:
+            if st <= nudge:
+                turn = d["recipient_id"] if _NEXT[d["status"]][1].startswith("Waiting") else d["inviter_id"]
+                await _confirm_nudge(db.dates, d["id"], turn, f"{d.get('local_day') or st.strftime('%Y-%m-%d')} · {d.get('local_time') or st.strftime('%H:%M')}", {"date_id": d["id"]}, DATES_LINK)
+            continue
         res = await db.dates.update_one({"id": d["id"], "status": d["status"]}, {"$set": {"status": "CANCELLED", **base}})
         if not res.modified_count: continue
         await _refund(d, "full_inviter", "CANCELLED")
@@ -6553,7 +6567,10 @@ async def _auto_cancel_unconfirmed():
     # VIP calendar bookings the VIP never confirmed
     async for b in db.vip_sched.find({"status": "pending"}, {"_id": 0}):
         st = _vs_start_dt(b)
-        if not st or st > cutoff: continue
+        if not st: continue
+        if st > cutoff:
+            if st <= nudge: await _confirm_nudge(db.vip_sched, b["id"], b["vip_id"], f"{b['date']} · {b['start']}", {"booking_id": b["id"]}, f"{PUBLIC_APP_URL}/vip-bookings")
+            continue
         lock_for = []
         for uid in (b["vip_id"], b["requester_id"]):
             u = await db.users.find_one({"id": uid}, {"_id": 0})

@@ -117,3 +117,4 @@ React (CRA/craco) + FastAPI (server.py, ~4.9k lines) + MongoDB. JWT email/passwo
 - 2026-10-27: Countdown 'Starts in Xh Ym' moved above the big start/finish times (BigTime.jsx, normal + VIP dates).
 - 2026-10-27: In-progress dates show 'In progress · Ends in Xm' above the big times (BigTime.jsx, normal + VIP).
 - 2026-11-26: Auto-cancel unconfirmed dates 15 min before start (date_bookings escrow, dates invite flow, vip_sched pending) with full refund to inviter + notices to both; slot stays locked for non-premium parties (premium auto-reopened; vip_sched uses lock_for). Runs in _date_lifecycle_loop + /api/cron/tick. Countdown hidden on cancelled/completed cards.
+- 2026-11-26: Confirm reminder (in-app + email) 1h before auto-cancel (i.e. 1h15m before start) to the person who must confirm only; flag confirm_reminded keyed by date/time.
