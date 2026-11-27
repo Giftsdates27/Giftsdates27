@@ -277,6 +277,7 @@ export const VS_T = {
   lt_reopen: row("Reopen"),
   lt_unlock_premium: row("Unlock with Premium"),
   lt_reopened: row("Time reopened"),
+  ls_choose_premium: row("Choose Premium-Lite or Premium"),
   arr_label: row("Arrival instructions (optional)"),
   pu_note_label2: row("Note for the pick-up place (optional)"),
   pu_addr_intro2: row("Add where you'd like to be picked up — the pick-up is at the date's start time."),

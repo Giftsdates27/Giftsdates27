@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import LockedTimeNote from "../components/LockedTimeNote";
+import LockedSlots from "../components/LockedSlots";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { CalendarHeart, MapPin, Clock, Coins, ShieldAlert, Flag, Camera, Car, Check, X, MessageCircle, Send, CalendarPlus, Lock, CalendarClock } from "lucide-react";
@@ -403,6 +404,7 @@ export default function InviteDates() {
         </div>
         <DatesEarnings />
       </header>
+      <div className="mb-6 empty:hidden"><LockedSlots /></div>
 
       {nothing ? <EmptyDates /> : <>
         <div className="mb-4"><DatesToday items={todayItems} onOpen={openToday} /></div>

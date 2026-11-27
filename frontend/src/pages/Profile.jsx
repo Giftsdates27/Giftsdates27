@@ -12,7 +12,6 @@ import { Switch } from "../components/ui/switch";
 import { toast } from "sonner";
 import PhotoGrid from "../components/PhotoGrid";
 import ProfileDetailsForm from "../components/ProfileDetailsForm";
-import LockedSlots from "../components/LockedSlots";
 import TrustedContacts from "../components/TrustedContacts";
 import AvailabilityCalendar from "../components/AvailabilityCalendar";
 import VipEditor from "../components/VipEditor";
@@ -218,7 +217,6 @@ export default function Profile() {
         <AvailabilityCalendar value={f.availability || []} ranges={f.availability_ranges || {}} weekly={f.availability_weekly || {}}
           legacySlots={f.availability_slots || {}} timeWindow={f.availability_time}
           onChange={(patch) => setF(prev => ({ ...prev, ...patch }))} />
-        <LockedSlots />
         <TrustedContacts />
         <div className="sticky bottom-4">
           <Button data-testid="profile-save-button" disabled={busy} onClick={save} className="rose-btn text-white border-0 h-12 w-full shadow-xl">{t("save", lang)}</Button>

@@ -12,7 +12,7 @@ export default function LockedSlots() {
   const { lang } = useApp();
   const [data, setData] = useState({ items: [], can_unlock: false });
   const [busy, setBusy] = useState(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const load = () => api.get("/me/locked-slots").then(r => setData(r.data)).catch(() => {});
   useEffect(() => { load(); const h = () => load(); window.addEventListener("gd-slots-changed", h); return () => window.removeEventListener("gd-slots-changed", h); }, []);
 
@@ -57,7 +57,7 @@ export default function LockedSlots() {
       {!data.can_unlock && (
         <div className="flex flex-wrap items-center gap-2 text-xs rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 mb-3 text-amber-100" data-testid="locked-slots-upsell">
           <Crown size={13} className="text-amber-300" />{t("ls_premium_only", lang)}
-          <button type="button" onClick={() => openUnlockUpsell({ all: true })} data-testid="locked-slots-upgrade" className="ms-auto text-amber-300 underline underline-offset-2 hover:text-amber-200 transition-colors">{t("buy_premium", lang)}</button>
+          <button type="button" onClick={() => openUnlockUpsell({ all: true })} data-testid="locked-slots-upgrade" className="ms-auto inline-flex items-center gap-1.5 rounded-full px-3 h-8 font-medium bg-amber-500/90 text-black hover:bg-amber-400 transition-colors"><Crown size={12} />{t("ls_choose_premium", lang)}</button>
         </div>
       )}
       <div className="divide-y divide-white/5 rounded-xl border border-white/10">
