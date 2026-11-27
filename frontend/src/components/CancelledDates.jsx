@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { useApp } from "../context/AppContext";
 import { t } from "../lib/i18n";
 import { DeclineNote } from "./DeclineReasonDialog";
+import LockedTimeNote from "./LockedTimeNote";
 
 export default function CancelledDates() {
   const { lang } = useApp();
@@ -55,6 +56,7 @@ export default function CancelledDates() {
                   )}
                 </div>
                 <DeclineNote reason={d.decline_reason} testid={`cancelled-date-reason-${d.id}`} />
+                <LockedTimeNote refId={d.id} testid={`cancelled-date-locked-${d.id}`} />
               </div>
               {d.refund_amount > 0 && (
                 <div className="text-right shrink-0" data-testid={`cancelled-date-refund-${d.id}`}>

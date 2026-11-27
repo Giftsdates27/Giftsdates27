@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
+import LockedTimeNote from "../components/LockedTimeNote";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Calendar, Clock, Check, X, Crown, Loader2, CalendarClock, MapPin, CalendarDays } from "lucide-react";
@@ -209,6 +210,7 @@ function BookingCard({ b, who, onConfirm, onDecline, onCancel, onReschedule, onR
     {who === "outgoing" && ["pending", "confirmed"].includes(b.status) && now < start.getTime() && <div className="mt-3"><CancelLossNote total={b.coins || 0} taxi={b.taxi_coins || 0} testid={`vs-cancel-loss-${b.id}`} /></div>}
     {b.reschedule_proposal && ["pending", "confirmed"].includes(b.status) && <RescheduleProposal b={b} who={who} onDone={onReload} />}
     {(b.status === "declined" || b.cancel_reason === "NOT_CONFIRMED") && <DeclineNote reason={b.decline_reason} testid={`vs-decline-reason-${b.id}`} />}
+    {b.status === "cancelled" && <LockedTimeNote refId={b.id} testid={`vs-locked-${b.id}`} />}
     {b.status === "reported" && <NoShowCase b={b} who={who} onDone={onReload} />}
     <VipPickupBlock b={b} who={who} onDone={onReload} onCancel={onCancel} />
     <VipTaxiBlock b={b} who={who} onDone={onReload} />

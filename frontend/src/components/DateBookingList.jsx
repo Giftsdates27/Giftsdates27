@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import LockedTimeNote from "./LockedTimeNote";
 import DeclineReasonDialog, { DeclineNote } from "./DeclineReasonDialog";
 import { api, fileUrl } from "../lib/api";
 import { useApp } from "../context/AppContext";
@@ -189,6 +190,7 @@ export default function DateBookingList({ mode = "regular", onItems, filter = "a
         {(b.address || b.lat || b.postal_code) && <div className="text-xs text-slate-400 mt-0.5">{[b.address, b.postal_code, b.country].filter(Boolean).join(" · ")} <MapsLink loc={b} testid={`date-maps-link-${b.id}`} /><UnverifiedNote show={b.unverified} testid={`booking-unverified-${b.id}`} /></div>}
         {b.meet?.address && <div className="text-xs text-emerald-300 mt-0.5" data-testid={`meet-location-${b.id}`}>📍 {t("meet_location", lang)}: {[b.meet.address, b.meet.postal_code, b.meet.country].filter(Boolean).join(" · ")} <MapsLink loc={{ ...b.meet, venue: b.venue }} testid={`meet-maps-link-${b.id}`} /><UnverifiedNote show={b.meet?.unverified} testid={`meet-unverified-${b.id}`} /></div>}
         {(b.status === "declined" || b.cancel_reason === "NOT_CONFIRMED") && <DeclineNote reason={b.decline_reason} testid={`booking-decline-reason-${b.id}`} />}
+        {["declined", "cancelled"].includes(b.status) && <LockedTimeNote refId={b.id} testid={`booking-locked-${b.id}`} />}
         <div className="mt-1 flex items-center gap-2 flex-wrap">
           <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_COLOR[b.status]}`}>{t(STATUS_MAP[b.status], lang)}</span>
           {["accepted", "confirmed"].includes(b.status) && <CountdownBadge to={b.scheduled_at} testid={`date-countdown-${b.id}`} />}

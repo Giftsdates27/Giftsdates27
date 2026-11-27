@@ -2767,33 +2767,37 @@ def _block(day, start_min, reason, end_min=None):
     return day, {"from": _min_to_hm(start_min), "to": _min_to_hm(end_min), "reason": reason,
                  "lock_from": _min_to_hm(max(0, start_min - DATE_BUFFER)), "lock_to": _min_to_hm(end_min + DATE_BUFFER)}
 
-async def _taken_blocks(u, exclude=None, include_vs=True):
+async def _taken_blocks(u, exclude=None, include_vs=True, refs=None):
     """Every locked block per local day for a user: other dates (booked), pending reschedule proposals (booked) and cancelled dates/slots (cancelled)."""
     uid, out = u["id"], {}
     unlocked = set(u.get("unlocked_slots") or [])
-    def add(day, start, reason, end=None):
+    def add(day, start, reason, end=None, ref=None):
         d, b = _block(day, start, reason, end)
         if reason == "cancelled" and f"{d}|{b['from']}" in unlocked: return
         out.setdefault(d, []).append(b)
+        if refs is not None and ref and reason == "cancelled": refs.setdefault(f"{d}|{b['from']}", set()).add(ref)
     def add_prop(p, dur):
         if p and p.get("local_day") and p.get("local_time"):
             st = _hm_to_min(p["local_time"]); add(p["local_day"][:10], st, "booked", st + dur)
-    async for b in db.date_bookings.find({"status": {"$in": ["escrow", "accepted", "confirmed", "cancelled"]}, "id": {"$ne": exclude}, "$or": [{"to_id": uid}, {"from_id": uid}]},
-                                         {"_id": 0, "status": 1, "scheduled_at": 1, "slot_from": 1, "slot_to": 1, "local_time": 1, "local_day": 1, "reschedule_proposal": 1}):
-        add((b.get("local_day") or b["scheduled_at"])[:10], _booking_start_min(b), "cancelled" if b["status"] == "cancelled" else "booked", _booking_end_min(b))
-        if b["status"] != "cancelled": add_prop(b.get("reschedule_proposal"), _booking_end_min(b) - _booking_start_min(b))
+    async for b in db.date_bookings.find({"status": {"$in": ["escrow", "accepted", "confirmed", "cancelled", "declined"]}, "id": {"$ne": exclude}, "$or": [{"to_id": uid}, {"from_id": uid}]},
+                                         {"_id": 0, "id": 1, "status": 1, "scheduled_at": 1, "slot_from": 1, "slot_to": 1, "local_time": 1, "local_day": 1, "reschedule_proposal": 1}):
+        add((b.get("local_day") or b["scheduled_at"])[:10], _booking_start_min(b), "cancelled" if b["status"] in ("cancelled", "declined") else "booked", _booking_end_min(b), b["id"])
+        if b["status"] not in ("cancelled", "declined"): add_prop(b.get("reschedule_proposal"), _booking_end_min(b) - _booking_start_min(b))
     async for d in db.dates.find({"status": {"$in": INVITE_ACTIVE + INVITE_CANCELLED}, "id": {"$ne": exclude}, "$or": [{"inviter_id": uid}, {"recipient_id": uid}]},
-                                 {"_id": 0, "status": 1, "location": 1, "proposed_start": 1, "local_day": 1, "local_time": 1, "reschedule_proposal": 1}):
+                                 {"_id": 0, "id": 1, "status": 1, "location": 1, "proposed_start": 1, "local_day": 1, "local_time": 1, "reschedule_proposal": 1}):
         st = _pdt((d.get("location") or {}).get("scheduled_start") or d.get("proposed_start"))
         if not st: continue
         day = d.get("local_day") or st.strftime("%Y-%m-%d")
-        add(day, _hm_to_min(d.get("local_time") or st.strftime("%H:%M")), "cancelled" if d["status"] in INVITE_CANCELLED else "booked")
+        add(day, _hm_to_min(d.get("local_time") or st.strftime("%H:%M")), "cancelled" if d["status"] in INVITE_CANCELLED else "booked", None, d["id"])
         if d["status"] in INVITE_ACTIVE: add_prop(d.get("reschedule_proposal"), DATE_SLOT_MINUTES)
     for ls in (u.get("locked_slots") or []):
         st = _pdt(ls.get("start"))
-        if st: add(ls.get("date") or st.strftime("%Y-%m-%d"), st.hour * 60 + st.minute, "cancelled")
+        if st: add(ls.get("date") or st.strftime("%Y-%m-%d"), st.hour * 60 + st.minute, "cancelled", None, ls.get("date_id") or ls.get("ref_id") or ls.get("id"))
     if include_vs:
-        await _add_vs_blocks(uid, u, lambda d, b: out.setdefault(d, []).append(b), exclude)
+        def add_vs(d, b, ref=None):
+            out.setdefault(d, []).append(b)
+            if refs is not None and ref and b["reason"] == "cancelled": refs.setdefault(f"{d}|{b['from']}", set()).add(ref)
+        await _add_vs_blocks(uid, u, add_vs, exclude)
     # de-duplicate identical blocks (e.g. a rejected invite also stored in locked_slots)
     return {k: [dict(t) for t in {tuple(sorted(x.items())) for x in v}] for k, v in out.items()}
 
@@ -2801,11 +2805,11 @@ async def _add_vs_blocks(uid, u, add_raw, exclude=None):
     """VIP calendar bookings (as VIP or client) + their pending proposals lock the user's normal calendar too (15-min buffer each side)."""
     docs = await db.vip_sched.find({"id": {"$ne": exclude}, "$or": [{"vip_id": uid}, {"requester_id": uid}],
                                     "$and": [{"$or": [{"status": {"$in": ["pending", "confirmed"]}}, {"status": "cancelled", "lock_for": uid}]}]},
-                                   {"_id": 0, "status": 1, "date": 1, "start": 1, "end": 1, "tz": 1, "reschedule_proposal": 1}).to_list(500)
+                                   {"_id": 0, "id": 1, "status": 1, "date": 1, "start": 1, "end": 1, "tz": 1, "reschedule_proposal": 1}).to_list(500)
     if not docs: return
     utz = u.get("timezone") or ((await db.users.find_one({"id": uid}, {"_id": 0, "timezone": 1})) or {}).get("timezone")
     unlocked = set(u.get("unlocked_slots") or [])
-    def put(date, start, end, tz, reason="booked"):
+    def put(date, start, end, tz, reason="booked", ref=None):
         dur = (_hm_to_min(end) - _hm_to_min(start)) % 1440 or 60
         if utz and tz and utz != tz:
             try:
@@ -2816,10 +2820,10 @@ async def _add_vs_blocks(uid, u, add_raw, exclude=None):
         d, b = _block(date, sm, reason, sm + dur)
         if reason == "cancelled" and f"{d}|{b['from']}" in unlocked: return
         b["lock_from"] = _min_to_hm(max(0, sm - VIP_SCHED_BUFFER)); b["lock_to"] = _min_to_hm(sm + dur + VIP_SCHED_BUFFER)
-        add_raw(d, b)
+        add_raw(d, b, ref)
     for b in docs:
         if b["status"] == "cancelled":
-            put(b["date"], b["start"], b["end"], b.get("tz"), "cancelled"); continue
+            put(b["date"], b["start"], b["end"], b.get("tz"), "cancelled", b["id"]); continue
         put(b["date"], b["start"], b["end"], b.get("tz"))
         p = b.get("reschedule_proposal")
         if p: put(p["date"], p["start"], p["end"], b.get("tz"))
@@ -2844,8 +2848,9 @@ class UnlockSlotReq(BaseModel):
 async def my_locked_slots(user=Depends(get_current_user)):
     """Upcoming times locked by a cancelled or refused date, which subscribers can reopen."""
     today = _now().strftime("%Y-%m-%d")
-    blocks = await _taken_blocks(user)
-    items = sorted(({"day": d, "from": b["from"], "to": b["to"]} for d, v in blocks.items() if d >= today for b in v if b["reason"] == "cancelled"),
+    refs = {}
+    blocks = await _taken_blocks(user, refs=refs)
+    items = sorted(({"day": d, "from": b["from"], "to": b["to"], "refs": sorted(refs.get(f"{d}|{b['from']}", []))} for d, v in blocks.items() if d >= today for b in v if b["reason"] == "cancelled"),
                    key=lambda x: (x["day"], x["from"]))
     return {"items": items, "can_unlock": has_premium(user)}
 
@@ -6501,7 +6506,7 @@ async def _run_booking_reminders():
             for uid in (b["from_id"], b["to_id"]):
                 await notify(uid, "date_reminder", title, body, {"booking_id": b["id"]}, email=email, link=DATES_LINK, cta="View Date", sms=False)
 
-NOT_CONFIRMED_NOTE = "Not confirmed 15 minutes before the start — cancelled automatically. All coins went back to the inviter."
+NOT_CONFIRMED_NOTE = "Not confirmed 5 minutes before the start — cancelled automatically. All coins went back to the inviter."
 INVITE_UNCONFIRMED = ["INVITATION_SENT", "DATE_ACTIVITY_SELECTED", "LOCATION_PROPOSED", "TAXI_REQUESTED", "PICKUP_ADDRESS_PENDING", "PICKUP_ADDRESS_SELECTED"]
 
 async def _premium_reopen(uids, day, start_min):
@@ -6513,7 +6518,7 @@ async def _premium_reopen(uids, day, start_min):
 
 async def _expired_notify(inviter, invited, when, coins, ref, link):
     await notify(inviter, "date_declined", "Date cancelled — not confirmed in time ⌛",
-                 f"Your date on {when} wasn't confirmed 15 minutes before the start, so it was cancelled automatically. All your coins (🪙 {coins}) were refunded.",
+                 f"Your date on {when} wasn't confirmed 5 minutes before the start, so it was cancelled automatically. All your coins (🪙 {coins}) were refunded.",
                  ref, email=True, link=link, cta="Open Dates")
     await notify(invited, "date_declined", "Invitation expired ⌛",
                  f"You didn't confirm the date on {when} in time, so it was cancelled automatically and the coins went back to the inviter.",
@@ -6524,11 +6529,11 @@ async def _confirm_nudge(coll, doc_id, uid, when, ref, link):
     res = await coll.update_one({"id": doc_id, "confirm_reminded": {"$ne": when}}, {"$set": {"confirm_reminded": when}})  # keyed by time so a rescheduled date gets its own nudge
     if not res.modified_count: return
     await notify(uid, "date_request", "Please confirm your date ⏰",
-                 f"Your date on {when} isn't confirmed yet. Confirm it within 1 hour — otherwise it's cancelled automatically 15 minutes before the start.",
+                 f"Your date on {when} isn't confirmed yet. Confirm it within 1 hour — otherwise it's cancelled automatically 5 minutes before the start.",
                  ref, email=True, link=link, cta="Confirm date")
 
 async def _auto_cancel_unconfirmed():
-    now = _now(); cutoff = now + timedelta(minutes=15); nudge = cutoff + timedelta(hours=1)
+    now = _now(); cutoff = now + timedelta(minutes=5); nudge = cutoff + timedelta(hours=1)
     base = {"cancel_reason": "NOT_CONFIRMED", "cancelled_by": "system", "cancelled_at": now.isoformat(), "decline_reason": NOT_CONFIRMED_NOTE}
     # normal & VIP-price-list bookings waiting for the invited person's answer
     async for b in db.date_bookings.find({"status": "escrow"}, {"_id": 0}):
